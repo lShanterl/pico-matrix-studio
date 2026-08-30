@@ -1,0 +1,29 @@
+[package]
+name = "ws2812"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m-rt = "0.7.6"
+rp2040-boot2 = "0.3.0"
+smart-leds = "0.3"
+cyw43 = "0.7.0"
+cyw43-pio = "0.10.0"
+static_cell = "2.1.1"
+portable-atomic = { version = "1.5", features = ["critical-section"] }
+aligned = "0.4"
+log = "0.4.33"
+embassy-rp = { version = "0.10.0", features = [ "time-driver", "rp2040", "critical-section-impl"] }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"] }
+embassy-net = { version = "0.9.1", features = ["tcp", "udp", "dhcpv4", "medium-ethernet", "proto-ipv4"] }
+embassy-usb = { version = "0.6.0" }
+embassy-hal-internal = "0.5.0"
+embassy-time = { version = "0.5.1" }
+embassy-usb-logger = { version = "0.6.0" }
+panic-halt = "1.0.0"
+ws2812-async = "0.4.0"
+
+[[bin]]
+name = "ws2812"
+test = false
+bench = false
