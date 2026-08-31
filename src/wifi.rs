@@ -19,15 +19,9 @@ static WIFI_FIRMWARE: aligned::Aligned<aligned::A4, [u8; include_bytes!("../firm
 static NVRAM: aligned::Aligned<aligned::A4, [u8; include_bytes!("../firmware/nvram_rp2040.bin").len()]> =
     aligned::Aligned(*include_bytes!("../firmware/nvram_rp2040.bin"));
 
-/*
-    Układ Wi-Fi CYW43439 zamontowany na Raspberry Pi Pico W jest osobnym procesorem.
-    Aby mikrokontroler RP2040 mógł z nim współpracować, musi stale odbierać z niego powiadomienia sprzętowe
-    utrzymywać połączenie radiowe z routerem (obsługiwać tzw. pakiety keep-alive, re-negocjacje kluczy szyfrujących)
-    oraz przesyłać bajty przez interfejs PIO/DMA. wifi_task to bezkresna pętla, która się tym zajmuje.
- */
 
-// Gdyby nie te zadania w tle, musiałbyś w swojej pętli loop co kilka milisekund ręcznie wywoływać funkcje typu cyw43_poll() oraz net_stack_poll()
-// co drastycznie skomplikowałoby kod i prowadziłoby do gubienia pakietów.
+// CYW43439 mounted on pico is a standalone processor on Pico W, in order to work with the RP2040 microcontroller it must constantly cooperate with it (wifi_task is responsible for that)
+// If not for those background tasks it would be necesary to call fns such as cyw43_poll() or net_stack_poll() that would lead to packet loss
 
 #[embassy_executor::task]
 async fn wifi_task(
@@ -92,6 +86,7 @@ pub async fn init(spawner : Spawner, p: WifiPeripherals) -> Wifi {
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
+    
     info!("Connecting to Wi-Fi: {}", WIFI_SSID);
     match control
         .join(WIFI_SSID, JoinOptions::new(WIFI_PASSWORD.as_bytes()))

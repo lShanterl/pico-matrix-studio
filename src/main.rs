@@ -6,6 +6,7 @@ mod irqs;
 mod usb;
 mod wifi;
 mod led_matrix;
+mod panic;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};

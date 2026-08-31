@@ -1,4 +1,3 @@
-use core::panic::PanicInfo;
 use embassy_executor::Spawner;
 use embassy_hal_internal::Peri;
 use embassy_rp::peripherals::USB;
@@ -6,7 +5,7 @@ use embassy_rp::usb::Driver;
 use embassy_time::{Duration, Timer};
 use embassy_usb::class::cdc_acm::CdcAcmClass;
 use embassy_usb::UsbDevice;
-use log::{error, info};
+use log::{info};
 use static_cell::StaticCell;
 use crate::irqs::Irqs;
 
@@ -32,19 +31,7 @@ async fn logger_task(class: CdcAcmClass<'static, Driver<'static, USB>>) -> ! {
     embassy_usb_logger::with_class!(1024, log::LevelFilter::Info, class).await
 }
 
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    // Emit the panic details to the `log` crate
-    error!("{}", info);
-
-    // Spin loop. If USB processing runs on interrupts or DMA,
-    // keeping execution alive gives the serial buffer time to flush out
-    loop {
-        core::hint::spin_loop();
-    }
-}
-
-// Builds cdc device and waits till terminal (such as PuTTY) connects to the device via DRT signal.
+// Builds cdc device and waits till terminal (such as PuTTY) connects to the device via DTR signal.
 // After returning from this function log::info!() calls will be printed to the terminal.
 pub async fn init(spawner: Spawner, usb: Peri<'static, USB>) {
     let driver = Driver::new(usb, Irqs);
@@ -76,14 +63,16 @@ pub async fn init(spawner: Spawner, usb: Peri<'static, USB>) {
     spawner.spawn(usb_task(usb).unwrap());
 
     // Waiting until a terminal connects
+    #[cfg(feature = "usb-debug")]
     while !class.dtr() {
         Timer::after(Duration::from_millis(100)).await;
     }
 
     // Short wait to make sure everything will be printed correctly
+    #[cfg(feature = "usb-debug")]
     Timer::after(Duration::from_millis(200)).await;
 
     spawner.spawn(logger_task(class).unwrap());
 
-    info!("--- Terminal is connected! Starting further configuration of Pico W ---");
+    info!("--- Terminal is connected! Starting further configuration of Pico W ---"); // logging is effectively free when nobody's listening. There's no runtime reason to strip it
 }
