@@ -5,11 +5,11 @@ use embassy_rp::pio::{Pio, PioPin};
 use embassy_rp::pio_programs::ws2812::{PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812};
 use log::info;
 use smart_leds::RGB8;
-use crate::config::{MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
+use crate::config::{MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
 use crate::irqs::Irqs;
 
 // Calculates coordinates (x, y) to linear index of pixels buffer. The matrix is wired in a zig-zag pattern, so even rows are left-to-right and odd rows are right-to-left
-fn xy_to_index(x: usize, y: usize) -> usize {
+pub fn xy_to_index(x: usize, y: usize) -> usize {
     if y % 2 == 0 {
         y * MATRIX_WIDTH + x
     } else {
@@ -28,6 +28,7 @@ fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
     let leds_current_ma = (total_channel_sum as f32 * 20f32) / 255f32;
     leds_current_ma as f32 + idle_current_ma as f32
 }
+pub type Frame = [RGB8; MATRIX_PIXEL_COUNT];
 
 pub struct MatrixPeripherals<P: PioPin> {
     pub pio0: Peri<'static, PIO0>,
@@ -77,6 +78,10 @@ impl LedMatrix {
 
     pub fn set_pixels(&mut self, pixels: [RGB8; MATRIX_PIXEL_COUNT]){
         self.pixels = pixels;
+    }
+
+    pub fn set_frame(&mut self, frame: &Frame) {
+        self.pixels.copy_from_slice(frame);
     }
 
     pub fn estimate_current_ma(&self) -> f32 {

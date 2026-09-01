@@ -7,11 +7,10 @@ mod usb;
 mod wifi;
 mod led_matrix;
 mod panic;
+mod animations;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use smart_leds::{SmartLedsWrite, RGB8};
-use crate::config::*;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
@@ -34,15 +33,17 @@ async fn main(spawner: Spawner) -> ! {
         data_pin: peripherals.PIN_18,
     });
 
-    for y in 0..16 {
-        for x in 0..16 {
-            matrix.set(x, y, if HEART_MAP[y][x] == 1 { RGB8::new(22, 14, 25) } else { RGB8::default() });
-        }
-    }
+    let mut tick: u32 = 0;
+
+    let mut animation = animations::RotatingPlasmaAnimation;
 
     loop {
-        Timer::after(Duration::from_secs(2)).await;
-
+        let frame = animation.next_frame(tick);
+        matrix.set_frame(&frame);
         matrix.show().await;
+
+        tick += 1;
+
+        Timer::after(Duration::from_millis(16)).await; // for 60fps
     }
 }
