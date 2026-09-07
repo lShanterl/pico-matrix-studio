@@ -20,6 +20,10 @@ embassy-usb = { version = "0.6.0" }
 embassy-hal-internal = "0.5.0"
 embassy-time = { version = "0.5.1" }
 embassy-usb-logger = { version = "0.6.0" }
+matrix-protocol = { path = "../shared" }
+embedded-alloc = "0.7.0"
+embassy-sync = "0.8.0"
+
 
 [[bin]]
 name = "pico-matrix-studio"
@@ -29,3 +33,4 @@ bench = false
 [features]
 default = ["usb-debug"]
 usb-debug = [] # gates the blocking DTR wait; enabled for dev flashes, disabled for production
+

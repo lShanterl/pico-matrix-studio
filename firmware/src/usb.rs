@@ -1,13 +1,13 @@
+use crate::irqs::Irqs;
 use embassy_executor::Spawner;
 use embassy_hal_internal::Peri;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::Driver;
 use embassy_time::{Duration, Timer};
-use embassy_usb::class::cdc_acm::CdcAcmClass;
 use embassy_usb::UsbDevice;
-use log::{info};
+use embassy_usb::class::cdc_acm::CdcAcmClass;
+use log::info;
 use static_cell::StaticCell;
-use crate::irqs::Irqs;
 
 #[allow(dead_code)]
 #[allow(unused_imports)]
@@ -28,7 +28,8 @@ async fn usb_task(mut device: UsbDevice<'static, Driver<'static, USB>>) -> ! {
 
 #[embassy_executor::task]
 async fn logger_task(class: CdcAcmClass<'static, Driver<'static, USB>>) -> ! {
-    embassy_usb_logger::with_class!(1024, log::LevelFilter::Info, class).await
+    // if memory is an issue, might decrease the 4096 into 1024
+    embassy_usb_logger::with_class!(4096, log::LevelFilter::Info, class).await
 }
 
 // Builds cdc device and waits till terminal (such as PuTTY) connects to the device via DTR signal.
@@ -54,10 +55,8 @@ pub async fn init(spawner: Spawner, usb: Peri<'static, USB>) {
         CONTROL_BUF.init([0; 64]),
     );
 
-
     let state = USB_STATE.init(embassy_usb::class::cdc_acm::State::new());
-    let mut class = CdcAcmClass::new(&mut builder, state, 64);
-
+    let class = CdcAcmClass::new(&mut builder, state, 64);
 
     let usb = builder.build();
     spawner.spawn(usb_task(usb).unwrap());
@@ -70,9 +69,11 @@ pub async fn init(spawner: Spawner, usb: Peri<'static, USB>) {
 
     // Short wait to make sure everything will be printed correctly
     #[cfg(feature = "usb-debug")]
-    Timer::after(Duration::from_millis(200)).await;
+    Timer::after(Duration::from_millis(2000)).await;
 
     spawner.spawn(logger_task(class).unwrap());
+    Timer::after(Duration::from_millis(1000)).await;
+
 
     info!("--- Terminal is connected! Starting further configuration of Pico W ---"); // logging is effectively free when nobody's listening. There's no runtime reason to strip it
 }

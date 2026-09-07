@@ -1,12 +1,14 @@
+use matrix_protocol::{Frame, MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
+use crate::irqs::Irqs;
 use embassy_hal_internal::Peri;
 use embassy_rp::gpio::AnyPin;
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, PIN_18, PIO0};
 use embassy_rp::pio::{Pio, PioPin};
-use embassy_rp::pio_programs::ws2812::{PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812};
+use embassy_rp::pio_programs::ws2812::{
+    PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812,
+};
 use log::info;
 use smart_leds::RGB8;
-use crate::config::{MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
-use crate::irqs::Irqs;
 
 // Calculates coordinates (x, y) to linear index of pixels buffer. The matrix is wired in a zig-zag pattern, so even rows are left-to-right and odd rows are right-to-left
 pub fn xy_to_index(x: usize, y: usize) -> usize {
@@ -22,13 +24,12 @@ fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
     let idle_current_ma = pixels.len() as f32;
     let mut total_channel_sum = 0u32;
 
-    for p in pixels{
+    for p in pixels {
         total_channel_sum += p.r as u32 + p.g as u32 + p.b as u32;
     }
     let leds_current_ma = (total_channel_sum as f32 * 20f32) / 255f32;
     leds_current_ma as f32 + idle_current_ma as f32
 }
-pub type Frame = [RGB8; MATRIX_PIXEL_COUNT];
 
 pub struct MatrixPeripherals<P: PioPin> {
     pub pio0: Peri<'static, PIO0>,
@@ -49,16 +50,17 @@ impl LedMatrix {
 
         let program = PioWs2812Program::new(&mut common);
 
-        let driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Rgb> = PioWs2812::<PIO0, 0, MATRIX_PIXEL_COUNT, Rgb>::with_color_order(
-            &mut common,
-            sm0,
-            p.dma_ch0,
-            Irqs,
-            p.data_pin,
-            &program,
-        );
+        let driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Rgb> =
+            PioWs2812::<PIO0, 0, MATRIX_PIXEL_COUNT, Rgb>::with_color_order(
+                &mut common,
+                sm0,
+                p.dma_ch0,
+                Irqs,
+                p.data_pin,
+                &program,
+            );
 
-        Self{
+        Self {
             driver,
             pixels: [RGB8::default(); MATRIX_PIXEL_COUNT],
         }
@@ -76,7 +78,7 @@ impl LedMatrix {
         self.pixels = [color; MATRIX_PIXEL_COUNT];
     }
 
-    pub fn set_pixels(&mut self, pixels: [RGB8; MATRIX_PIXEL_COUNT]){
+    pub fn set_pixels(&mut self, pixels: [RGB8; MATRIX_PIXEL_COUNT]) {
         self.pixels = pixels;
     }
 

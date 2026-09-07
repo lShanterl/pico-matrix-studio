@@ -1,8 +1,11 @@
+use matrix_protocol::{Frame, MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_ANIMATION_FRAMES};
+use crate::led_matrix::{xy_to_index};
 use embassy_rp::rom_data::float_funcs::{fcos, fsin, fsqrt};
-use smart_leds::hsv::{hsv2rgb, Hsv};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use smart_leds::RGB8;
-use crate::config::{MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH};
-use crate::led_matrix::{xy_to_index, Frame};
+use smart_leds::hsv::{Hsv, hsv2rgb};
+
 
 pub trait Animation {
     fn next_frame(&mut self, tick: u32) -> Frame;
@@ -19,7 +22,6 @@ impl StaticAnimation {
 }
 
 impl Animation for StaticAnimation {
-
     // Might need to change the logic or reset ticks when animation changes
     fn next_frame(&mut self, tick: u32) -> Frame {
         self.frames[(tick as usize) % self.frames.len()]
@@ -44,9 +46,7 @@ impl RotatingPlasmaAnimation {
 
                 let v3 = fsin((x as f32 * 0.15 + y as f32 * 0.33) * 0.4 - t * 0.5);
 
-
                 let v4 = fsin(r * 0.3 - t * 2.0);
-
 
                 let total = v1 + v2 + v3 + v4;
                 let normalized = ((total + 4.0) / 8.0).clamp(0.0, 1.0);
@@ -54,11 +54,7 @@ impl RotatingPlasmaAnimation {
                 let hue = ((normalized * 255.0 * 3.0) % 256.0) as u8; // denser color change * 3
                 let sat: u8 = 255;
                 let val: u8 = 25;
-                let hsv: Hsv = Hsv{
-                    hue,
-                    sat,
-                    val
-                };
+                let hsv: Hsv = Hsv { hue, sat, val };
 
                 frame[xy_to_index(x, y)] = hsv2rgb(hsv);
             }
@@ -67,3 +63,22 @@ impl RotatingPlasmaAnimation {
         frame
     }
 }
+
+pub struct StoredAnimation {
+    pub frames: [Frame; MAX_ANIMATION_FRAMES],
+    pub frame_count: usize,
+    pub fps: u8,
+}
+
+impl StoredAnimation {
+    pub const fn new() -> Self {
+        Self {
+            frames: [[RGB8::new(0, 0, 0); MATRIX_PIXEL_COUNT]; MAX_ANIMATION_FRAMES],
+            frame_count: 0,
+            fps: 30,
+        }
+    }
+}
+
+// CriticalSectionRawMutex is when data can be shared between threads and interrupts
+pub static STORED_ANIMATION: Mutex<CriticalSectionRawMutex, StoredAnimation> = Mutex::new(StoredAnimation::new());

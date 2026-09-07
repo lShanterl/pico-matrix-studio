@@ -1,2 +1,2 @@
 /target
-.cargo/config.toml
+firmware/.cargo/config.toml
