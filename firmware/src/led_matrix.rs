@@ -4,9 +4,7 @@ use embassy_hal_internal::Peri;
 use embassy_rp::gpio::AnyPin;
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, PIN_18, PIO0};
 use embassy_rp::pio::{Pio, PioPin};
-use embassy_rp::pio_programs::ws2812::{
-    PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812,
-};
+use embassy_rp::pio_programs::ws2812::{Grb, PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812};
 use log::info;
 use smart_leds::RGB8;
 
@@ -38,7 +36,7 @@ pub struct MatrixPeripherals<P: PioPin> {
 }
 
 pub struct LedMatrix {
-    driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Rgb>,
+    driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Grb>,
     pixels: [RGB8; MATRIX_PIXEL_COUNT],
 }
 
@@ -50,8 +48,8 @@ impl LedMatrix {
 
         let program = PioWs2812Program::new(&mut common);
 
-        let driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Rgb> =
-            PioWs2812::<PIO0, 0, MATRIX_PIXEL_COUNT, Rgb>::with_color_order(
+        let driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Grb> =
+            PioWs2812::new(
                 &mut common,
                 sm0,
                 p.dma_ch0,
@@ -83,7 +81,11 @@ impl LedMatrix {
     }
 
     pub fn set_frame(&mut self, frame: &Frame) {
-        self.pixels.copy_from_slice(frame);
+        for y in 0..MATRIX_HEIGHT {
+            for x in 0..MATRIX_WIDTH {
+                self.pixels[xy_to_index(x, y)] = frame[y * MATRIX_WIDTH + x];
+            }
+        }
     }
 
     pub fn estimate_current_ma(&self) -> f32 {

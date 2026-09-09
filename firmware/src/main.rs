@@ -17,6 +17,7 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 
 use embedded_alloc::LlffHeap as Heap;
+use log::info;
 use matrix_protocol::Command;
 use crate::animations::STORED_ANIMATION;
 use crate::Mode::Procedural;
@@ -62,6 +63,7 @@ async fn main(spawner: Spawner) -> ! {
         if let Ok(cmd) = COMMAND_CHANNEL.try_receive() {
             match cmd {
                 Command::SetFrame(pixels) => {
+                    info!("set pico frame");
                     matrix.set_frame(&pixels);
                     mode = Mode::Live;
                 }

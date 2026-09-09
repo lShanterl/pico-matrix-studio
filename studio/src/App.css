@@ -8,6 +8,9 @@
   --secondary-dark: #5c5c5c;
   --text-color-light: #d0d0d6;
   --text-color-dark: #6d6d78;
+
+  --active-green: #96e660;
+  --active-red: #ed5747;
 }
 
 html, body, #root {
@@ -45,11 +48,26 @@ body {
 }
 
 .titlebar-connection {
+  display: flex;
+  align-items: center;
   font-size: 0.85rem;
   font-weight: 400;
   color: var(--text-color-dark);
   letter-spacing: 0.02em;
 }
+.status-dot{
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background-color: var(--primary-dark);
+}
+.status-dot.connected{
+  background-color: var(--active-green);
+}
+.status-dot.disconnected{
+  background-color: var(--active-red);
+}
+
 
 .icon-button {
   background: transparent;

@@ -53,7 +53,8 @@ impl Command {
         match self {
             Command::SetFrame(frame) => {
                 buf[0] = 0x01;
-                write_pixels(buf, frame);
+                //todo check whether im doing this right
+                write_pixels(&mut buf[1..], frame);
                 1 + FRAME_BYTES
             }
             Command::SetBrightness(brightness) => {

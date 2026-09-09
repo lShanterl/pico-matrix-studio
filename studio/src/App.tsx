@@ -2,6 +2,8 @@ import {useRef, useState, useEffect} from "react";
 import "./App.css";
 import { Play, Pencil, Eraser, Undo, Redo, Pipette, Settings, PaintBucket } from "lucide-react";
 import {invoke} from "@tauri-apps/api/core";
+import { listen } from '@tauri-apps/api/event';
+
 
 const SIZE = 16;
 const PIXEL_COUNT = SIZE * SIZE;
@@ -10,6 +12,11 @@ export interface RGB {
     r: number;
     g: number;
     b: number;
+}
+
+interface ConnectionStatus {
+    connected: boolean;
+    ip: string;
 }
 
 const DEFAULT_RGB: RGB = { r: 0, g: 0, b: 0 };
@@ -38,6 +45,7 @@ const enum Tools {
     Bucket,
 }
 
+
 export default function App() {
 
     const [layout, setLayout] = useState<RGB[]>(Array.from({ length: PIXEL_COUNT }, (): RGB => DEFAULT_RGB));
@@ -47,6 +55,10 @@ export default function App() {
     const [areSettingsOpen, setAreSettingsOpen] = useState(false);
     const [activeTool, setActiveTool] = useState<Tools>(Tools.Pencil);
 
+    const [status, setStatus] = useState<ConnectionStatus>({ connected: false, ip: ""});
+    const [ipInput, setIpInput] = useState("192.168.1.50");
+
+
     const [operations, setOperations] = useState<RGB[][]>([]);
     const [redoHistory, setRedoHistory] = useState<RGB[][]>([]);
 
@@ -55,6 +67,28 @@ export default function App() {
 
     useEffect(() => { layoutRef.current = layout; }, [layout]);
 
+    useEffect(() => {
+        const unlisten = listen<typeof status>("pico-connection-status", (e) => {
+            setStatus(e.payload);
+        })
+
+        return () => {
+            unlisten.then((fn) => fn())
+        }
+    }, []);
+
+    const handleConnectClick = async () =>{
+        if (status.connected) {
+            await invoke("disconnect_from_pico");
+        } else {
+            try {
+                await invoke("connect_to_pico", { ip: ipInput });
+            } catch (e) {
+                console.error("Connection failed:", e);
+            }
+        }
+
+    }
 
     const colorsMatch = (c1: RGB, c2: RGB): boolean => {
         return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
@@ -198,7 +232,12 @@ export default function App() {
     return (
         <div className="app">
             <div className="titlebar">
-                <span className="titlebar-connection">Pico IP: 192.168.x.x</span>
+                <span className="titlebar-connection">
+                    <button className="icon-button" onClick={handleConnectClick}>
+                        <span className={`status-dot ${status.connected ? "connected" : "disconnected"}`} />
+                    </button>
+                    <span>{status.ip}</span>
+                </span>
                 <button className="icon-button" onClick={() => setAreSettingsOpen(!areSettingsOpen)} title="Settings">
                     <Settings className="ic-btn" />
                 </button>
@@ -245,7 +284,7 @@ export default function App() {
 
                     <div className="floating-toolbar">
                         <button className="floating-toolbar-btn action-btn" title="Send Frame to Pico"
-                            onClick={() => {invoke("send_frame_to_pico", { frame: layout })}}
+                            onClick={async () =>  await invoke("send_frame_to_pico", { layout: layout })}
                         >
                             <Play className="ic-btn" />
                         </button>

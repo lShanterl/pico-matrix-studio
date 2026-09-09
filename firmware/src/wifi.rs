@@ -14,6 +14,7 @@ use embassy_time::{with_timeout, Duration};
 use log::info;
 use static_cell::StaticCell;
 use crate::config::{WIFI_PASSWORD, WIFI_SSID};
+use crate::tcp_listener::control_task;
 
 static CYW43_STATE: StaticCell<cyw43::State> = StaticCell::new();
 static WIFI_FIRMWARE: aligned::Aligned<
@@ -138,6 +139,7 @@ pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'s
 
     spawner.spawn(net_task(runner).unwrap());
 
+    spawner.spawn(control_task(stack).unwrap());
 
     stack
 }

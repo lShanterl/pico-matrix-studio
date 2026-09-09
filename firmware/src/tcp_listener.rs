@@ -25,7 +25,7 @@ async fn read_exact(
 
 // growing matrix past 16x16 might require to split TCP packets
 #[embassy_executor::task]
-async fn control_task(stack: embassy_net::Stack<'static>) {
+pub async fn control_task(stack: embassy_net::Stack<'static>) {
     let mut rx = [0u8; 2048];
     let mut tx = [0u8; 256];
     let mut expected_frames = 0;
