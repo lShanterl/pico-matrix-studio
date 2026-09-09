@@ -213,10 +213,11 @@ body {
   aspect-ratio: 1 / 1;
   padding: clamp(0.6rem, 2vw, 1.2rem);
   box-sizing: border-box;
-  background-color: #131315;
+  background-color: var(--primary-darker);
   border-radius: 0.3rem;
   border: 1px solid #2e2d2d;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  user-select: none;
 }
 
 .pixel-grid {

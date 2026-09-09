@@ -1,6 +1,7 @@
-import { useState } from "react";
+import {useRef, useState, useEffect} from "react";
 import "./App.css";
 import { Play, Pencil, Eraser, Undo, Redo, Pipette, Settings, PaintBucket } from "lucide-react";
+import {invoke} from "@tauri-apps/api/core";
 
 const SIZE = 16;
 const PIXEL_COUNT = SIZE * SIZE;
@@ -27,7 +28,6 @@ const sidebarTools: string[] = ["Draw", "Animations"];
 
 const enum MenuItems {
     Draw,
-    Solid,
     Animations,
 }
 
@@ -39,6 +39,7 @@ const enum Tools {
 }
 
 export default function App() {
+
     const [layout, setLayout] = useState<RGB[]>(Array.from({ length: PIXEL_COUNT }, (): RGB => DEFAULT_RGB));
     const [isDrawing, setDrawing] = useState<boolean>(false);
     const [activeColor, setActiveColor] = useState<RGB>(ACTIVE_COLOR);
@@ -46,9 +47,14 @@ export default function App() {
     const [areSettingsOpen, setAreSettingsOpen] = useState(false);
     const [activeTool, setActiveTool] = useState<Tools>(Tools.Pencil);
 
-    const [initialMatrix, setInitialMatrix] = useState<RGB[]>([]);
     const [operations, setOperations] = useState<RGB[][]>([]);
     const [redoHistory, setRedoHistory] = useState<RGB[][]>([]);
+
+    const initialMatrixRef = useRef<RGB[]>([]);
+    const layoutRef = useRef<RGB[]>(layout);
+
+    useEffect(() => { layoutRef.current = layout; }, [layout]);
+
 
     const colorsMatch = (c1: RGB, c2: RGB): boolean => {
         return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
@@ -127,7 +133,8 @@ export default function App() {
     };
 
     const handleMouseDown = (index: number): void => {
-        setInitialMatrix([...layout]);
+        initialMatrixRef.current = [...layout];
+
         setDrawing(true);
         useTool(index);
 
@@ -142,8 +149,8 @@ export default function App() {
 
     const handleMouseUp = (): void =>{
         setDrawing(false);
-        if (JSON.stringify(initialMatrix) !== JSON.stringify(layout)) {
-            setOperations((prev) => [...prev, initialMatrix]);
+        if (JSON.stringify(initialMatrixRef.current) !== JSON.stringify(layoutRef.current)) {
+            setOperations((prev) => [...prev, initialMatrixRef.current]);
             setRedoHistory([]);
         }
         window.removeEventListener("mouseup", handleMouseUp);
@@ -237,7 +244,9 @@ export default function App() {
                     </div>
 
                     <div className="floating-toolbar">
-                        <button className="floating-toolbar-btn action-btn" title="Send Frame to Pico">
+                        <button className="floating-toolbar-btn action-btn" title="Send Frame to Pico"
+                            onClick={() => {invoke("send_frame_to_pico", { frame: layout })}}
+                        >
                             <Play className="ic-btn" />
                         </button>
                         <div className="toolbar-divider"></div>
