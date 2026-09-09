@@ -10,7 +10,7 @@
   --text-color-dark: #6d6d78;
 
   --active-green: #96e660;
-  --active-red: #ed5747;
+  --active-red: #f6402d;
 }
 
 html, body, #root {
@@ -211,6 +211,12 @@ body {
 
 .floating-toolbar-btn.action-btn:hover {
   background-color: #2b5933;
+}
+.floating-toolbar-btn.action-btn-trash{
+  background-color: var(--active-red);
+}
+.floating-toolbar-btn.action-btn-trash:hover {
+  background-color: #b12b1e;
 }
 
 .floating-toolbar-btn:disabled {

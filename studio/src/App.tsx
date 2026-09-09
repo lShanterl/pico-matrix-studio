@@ -1,6 +1,6 @@
 import {useRef, useState, useEffect} from "react";
 import "./App.css";
-import { Play, Pencil, Eraser, Undo, Redo, Pipette, Settings, PaintBucket } from "lucide-react";
+import {Play, Pencil, Eraser, Undo, Redo, Pipette, Settings, PaintBucket, Trash} from "lucide-react";
 import {invoke} from "@tauri-apps/api/core";
 import { listen } from '@tauri-apps/api/event';
 
@@ -105,6 +105,11 @@ export default function App() {
 
     const erasePixel = (index: number): void => {
         drawPixel(index, DEFAULT_RGB);
+    };
+    const clear = (): void => {
+        setOperations((prev) => [...prev, layout]);
+        setRedoHistory([]);
+        setLayout(Array.from({ length: PIXEL_COUNT }, (): RGB => DEFAULT_RGB));
     };
 
     const getPixelColor = (index: number): RGB => {
@@ -327,6 +332,12 @@ export default function App() {
                             disabled={redoHistory.length === 0}
                         >
                             <Redo className="ic-btn" />
+                        </button>
+                        <button
+                            className="floating-toolbar-btn action-btn-trash"
+                            onClick={clear}
+                        >
+                            <Trash className="ic-btn" />
                         </button>
                     </div>
                 </div>
