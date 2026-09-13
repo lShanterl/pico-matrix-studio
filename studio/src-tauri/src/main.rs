@@ -22,6 +22,10 @@ struct ConnectionStatus {
     error: Option<String>,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PowerEstimate { current_ma: f32, max_current_ma: u32, over_limit: bool }
+
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -130,6 +134,17 @@ async fn disconnect_from_pico(app: AppHandle, state: tauri::State<'_,NetworkStat
         Err(String::from("Failed to disconnect: not connected"))
     }
 }
+#[tauri::command]
+fn estimate_power(layout: Vec<RGB>) -> PowerEstimate {
+    let mut pixels: Vec<RGB8> = layout.into_iter().map(|p| RGB8 { r: p.r, g: p.g, b: p.b }).collect();
+    matrix_protocol::gamma_correct(&mut pixels);
+    let current_ma = matrix_protocol::estimate_current_ma(&pixels);
+    PowerEstimate {
+        current_ma,
+        max_current_ma: matrix_protocol::MAX_CURRENT_MA,
+        over_limit: current_ma > matrix_protocol::MAX_CURRENT_MA as f32,
+    }
+}
 
 fn main() {
     tauri::Builder::default()
@@ -144,7 +159,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             connect_to_pico,
             disconnect_from_pico,
-            send_frame_to_pico
+            send_frame_to_pico,
+            estimate_power
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri app");

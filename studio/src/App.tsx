@@ -1,178 +1,52 @@
-import {useRef, useState, useEffect} from "react";
+import {useRef, useState} from "react";
 import "./App.css";
-import {Play, Pencil, Eraser, Undo, Redo, Pipette, Settings, PaintBucket, Trash} from "lucide-react";
+import {Settings, DeleteIcon, Plus} from "lucide-react";
 import {invoke} from "@tauri-apps/api/core";
-import { listen } from '@tauri-apps/api/event';
-
-
-const SIZE = 16;
-const PIXEL_COUNT = SIZE * SIZE;
-
-export interface RGB {
-    r: number;
-    g: number;
-    b: number;
-}
-
-interface ConnectionStatus {
-    connected: boolean;
-    ip: string;
-}
-
-const DEFAULT_RGB: RGB = { r: 0, g: 0, b: 0 };
-const ACTIVE_COLOR: RGB = { r: 239, g: 68, b: 68 };
-
-const builtInColors: RGB[] = [
-    { r: 255, g: 59, b: 92 },
-    { r: 255, g: 176, b: 32 },
-    { r: 79, g: 209, b: 197 },
-    { r: 91, g: 141, b: 239 },
-    { r: 61, g: 220, b: 132 },
-    { r: 194, g: 91, b: 222 },
-];
-
-const sidebarTools: string[] = ["Draw", "Animations"];
-
-const enum MenuItems {
-    Draw,
-    Animations,
-}
-
-const enum Tools {
-    Pencil,
-    Eraser,
-    Pipette,
-    Bucket,
-}
+import {usePicoConnection} from "./hooks/usePicoConnection.ts";
+import {
+    ACTIVE_COLOR, builtInColors,
+    IP,
+    MenuItems,
+    RGB, sidebarTools,
+    Tools
+} from "./types.ts";
+import {usePixelLayout} from "./hooks/usePixelLayout.ts";
+import FloatingToolbar from "./components/FloatingToolbar.tsx";
+import PixelGrid from "./components/PixelGrid.tsx";
+import {usePowerEstimate} from "./hooks/usePowerEstimate.ts";
 
 
 export default function App() {
 
-    const [layout, setLayout] = useState<RGB[]>(Array.from({ length: PIXEL_COUNT }, (): RGB => DEFAULT_RGB));
+    const pixels = usePixelLayout();
+    const { status, connect, disconnect } = usePicoConnection();
+    const power = usePowerEstimate(pixels.layout);
+
     const [isDrawing, setDrawing] = useState<boolean>(false);
+    const initialMatrixRef = useRef<RGB[]>([]);
+
     const [activeColor, setActiveColor] = useState<RGB>(ACTIVE_COLOR);
     const [activeMenu, setActiveMenu] = useState<MenuItems>(MenuItems.Draw);
     const [areSettingsOpen, setAreSettingsOpen] = useState(false);
     const [activeTool, setActiveTool] = useState<Tools>(Tools.Pencil);
 
-    const [status, setStatus] = useState<ConnectionStatus>({ connected: false, ip: ""});
-    const [ipInput, setIpInput] = useState("192.168.1.50");
+    const [availableColors, setAvailableColors] = useState<RGB[]>([...builtInColors]);
 
-
-    const [operations, setOperations] = useState<RGB[][]>([]);
-    const [redoHistory, setRedoHistory] = useState<RGB[][]>([]);
-
-    const initialMatrixRef = useRef<RGB[]>([]);
-    const layoutRef = useRef<RGB[]>(layout);
-
-    useEffect(() => { layoutRef.current = layout; }, [layout]);
-
-    useEffect(() => {
-        const unlisten = listen<typeof status>("pico-connection-status", (e) => {
-            setStatus(e.payload);
-        })
-
-        return () => {
-            unlisten.then((fn) => fn())
-        }
-    }, []);
 
     const handleConnectClick = async () =>{
         if (status.connected) {
-            await invoke("disconnect_from_pico");
+            await disconnect();
         } else {
             try {
-                await invoke("connect_to_pico", { ip: ipInput });
+                await connect(IP);
             } catch (e) {
                 console.error("Connection failed:", e);
             }
         }
-
     }
 
-    const colorsMatch = (c1: RGB, c2: RGB): boolean => {
-        return c1.r === c2.r && c1.g === c2.g && c1.b === c2.b;
-    };
-
-    const drawPixel = (index: number, color?: RGB): void => {
-        const targetColor = color ? color : activeColor;
-        setLayout((prevLayout) => {
-            const next = [...prevLayout];
-            next[index] = targetColor;
-            return next;
-        });
-    };
-
-    const erasePixel = (index: number): void => {
-        drawPixel(index, DEFAULT_RGB);
-    };
-    const clear = (): void => {
-        setOperations((prev) => [...prev, layout]);
-        setRedoHistory([]);
-        setLayout(Array.from({ length: PIXEL_COUNT }, (): RGB => DEFAULT_RGB));
-    };
-
-    const getPixelColor = (index: number): RGB => {
-        return layout[index];
-    };
-
-    const bucketFill = (startIndex: number, targetColor?: RGB): void => {
-        const fillColor = targetColor ? targetColor : activeColor;
-        const startColor = layout[startIndex];
-
-        if (colorsMatch(startColor, fillColor)) return;
-
-        const nextLayout = [...layout];
-        const queue: number[] = [startIndex];
-        const visited = new Set<number>();
-
-        while (queue.length > 0) {
-            const current = queue.pop()!;
-            if (visited.has(current)) continue;
-            visited.add(current);
-
-            if (colorsMatch(nextLayout[current], startColor)) {
-                nextLayout[current] = fillColor;
-
-                const x = current % SIZE;
-                const y = Math.floor(current / SIZE);
-
-                if (x > 0) queue.push(current - 1);
-                if (x < SIZE - 1) queue.push(current + 1);
-                if (y > 0) queue.push(current - SIZE);
-                if (y < SIZE - 1) queue.push(current + SIZE);
-            }
-        }
-        setLayout(nextLayout);
-    };
-
-    // simple undo & redo, for a 16x16 frame adding batching would be an overkill
-    const undo = (): void => {
-        if (operations.length > 0) {
-            const previousOperations = [...operations];
-            const lastState = previousOperations.pop();
-            if (lastState) {
-                setRedoHistory((prev) => [...prev, layout]);
-                setLayout(lastState);
-                setOperations(previousOperations);
-            }
-        }
-    };
-
-    const redo = (): void => {
-        if (redoHistory.length > 0) {
-            const previousRedo = [...redoHistory];
-            const nextState = previousRedo.pop();
-            if (nextState) {
-                setOperations((prev) => [...prev, layout]);
-                setLayout(nextState);
-                setRedoHistory(previousRedo);
-            }
-        }
-    };
-
     const handleMouseDown = (index: number): void => {
-        initialMatrixRef.current = [...layout];
+        initialMatrixRef.current = [...pixels.layout];
 
         setDrawing(true);
         useTool(index);
@@ -188,36 +62,17 @@ export default function App() {
 
     const handleMouseUp = (): void =>{
         setDrawing(false);
-        if (JSON.stringify(initialMatrixRef.current) !== JSON.stringify(layoutRef.current)) {
-            setOperations((prev) => [...prev, initialMatrixRef.current]);
-            setRedoHistory([]);
-        }
+        pixels.commitStroke(initialMatrixRef.current);
         window.removeEventListener("mouseup", handleMouseUp);
-
     }
 
-
-    const useTool = (index: number): void => {
+    const useTool = (index: number) => {
         switch (activeTool) {
-            case Tools.Pencil:
-                drawPixel(index);
-                break;
-            case Tools.Eraser:
-                erasePixel(index);
-                break;
-            case Tools.Pipette:
-                setActiveColor(getPixelColor(index));
-                break;
-            case Tools.Bucket:
-                bucketFill(index);
-                break;
+            case Tools.Pencil: pixels.drawPixel(index, activeColor); break;
+            case Tools.Eraser: pixels.erasePixel(index); break;
+            case Tools.Bucket: pixels.bucketFill(index, activeColor); break;
+            case Tools.Pipette: setActiveColor(pixels.layout[index]); break;
         }
-    };
-
-    const applySolidColor = (color: RGB): void => {
-        setOperations((prev) => [...prev, layout]);
-        setRedoHistory([]);
-        setLayout(Array.from({ length: PIXEL_COUNT }, (): RGB => color));
     };
 
     const rgbToHex = (color: RGB): string => {
@@ -234,6 +89,18 @@ export default function App() {
         };
     };
 
+    const handleAddColor = (): void => {
+        const color = activeColor;
+        if(availableColors.includes(color)) return;
+        setAvailableColors([...availableColors, color])
+    }
+
+    const handleRemoveColor = (): void => {
+        const color = activeColor;
+        const colors = availableColors.filter(c => c != color);
+        setAvailableColors(colors);
+    }
+
     return (
         <div className="app">
             <div className="titlebar">
@@ -243,9 +110,17 @@ export default function App() {
                     </button>
                     <span>{status.ip}</span>
                 </span>
-                <button className="icon-button" onClick={() => setAreSettingsOpen(!areSettingsOpen)} title="Settings">
-                    <Settings className="ic-btn" />
-                </button>
+                <div className="titlebar-right">
+                    {power && (
+                        <div className={`power-readout ${power.overLimit ? "over-limit" : ""}`}>
+                            {Math.round(power.currentMa)} mA / {power.maxCurrentMa} mA
+                        </div>
+                    )}
+                    <button className="icon-button" onClick={() => setAreSettingsOpen(!areSettingsOpen)} title="Settings">
+                        <Settings className="ic-btn" />
+                    </button>
+                </div>
+
             </div>
 
             {areSettingsOpen && (
@@ -273,73 +148,23 @@ export default function App() {
                 </div>
 
                 <div className="workspace">
-                    <div className="pixel-grid-container">
-                        <div className="pixel-grid">
-                            {layout.map((pixel, i) => (
-                                <div
-                                    key={i}
-                                    className="pixel-grid-item"
-                                    style={{ backgroundColor: `rgb(${pixel.r}, ${pixel.g}, ${pixel.b})` }}
-                                    onMouseDown={() => handleMouseDown(i)}
-                                    onMouseEnter={() => handleMouseEnter(i)}
-                                ></div>
-                            ))}
-                        </div>
-                    </div>
+                    <PixelGrid
+                        layout={pixels.layout}
+                        onMouseDown={handleMouseDown}
+                        onMouseEnter={handleMouseEnter}
+                    />
+                    <FloatingToolbar
+                        connected={status.connected}
+                        onSend={() => invoke("send_frame_to_pico", { layout: pixels.layout })}
+                        activeTool={activeTool}
+                        onToolChange={setActiveTool}
+                        onUndo={pixels.undo}
+                        onRedo={pixels.redo}
+                        canUndo={pixels.canUndo}
+                        canRedo={pixels.canRedo}
+                        onClear={pixels.clear}
+                    />
 
-                    <div className="floating-toolbar">
-                        <button className={`floating-toolbar-btn action-btn`} disabled={!status.connected} title="Send Frame to Pico"
-                                onClick={async () =>  await invoke("send_frame_to_pico", { layout: layout })}
-                        >
-                            <Play className="ic-btn" />
-                        </button>
-                        <div className="toolbar-divider"></div>
-                        <button
-                            className={`floating-toolbar-btn ${activeTool === Tools.Pencil ? "active" : ""}`}
-                            onClick={() => setActiveTool(Tools.Pencil)}
-                        >
-                            <Pencil className="ic-btn" />
-                        </button>
-                        <button
-                            className={`floating-toolbar-btn ${activeTool === Tools.Eraser ? "active" : ""}`}
-                            onClick={() => setActiveTool(Tools.Eraser)}
-                        >
-                            <Eraser className="ic-btn" />
-                        </button>
-                        <button
-                            className={`floating-toolbar-btn ${activeTool === Tools.Pipette ? "active" : ""}`}
-                            onClick={() => setActiveTool(Tools.Pipette)}
-                        >
-                            <Pipette className="ic-btn" />
-                        </button>
-                        <button
-                            className={`floating-toolbar-btn ${activeTool === Tools.Bucket ? "active" : ""}`}
-                            onClick={() => setActiveTool(Tools.Bucket)}
-                        >
-                            <PaintBucket className="ic-btn" />
-                        </button>
-                        <div className="toolbar-divider"></div>
-                        <button
-                            className="floating-toolbar-btn"
-                            onClick={undo}
-                            disabled={operations.length === 0}
-                        >
-                            <Undo className="ic-btn" />
-                        </button>
-                        <button
-                            className="floating-toolbar-btn"
-                            onClick={redo}
-                            disabled={redoHistory.length === 0}
-                        >
-                            <Redo className="ic-btn" />
-                        </button>
-                        <button
-                            className="floating-toolbar-btn action-btn-trash"
-                            onClick={clear}
-                        >
-                            <Trash className="ic-btn" />
-                        </button>
-                    </div>
                 </div>
 
                 <div className="transform-matrix-container">
@@ -373,7 +198,7 @@ export default function App() {
                         </div>
 
                         <div className="built-in-colors-container">
-                            {builtInColors.map((color, index) => (
+                            {availableColors.map((color, index) => (
                                 <button
                                     className="color-button"
                                     key={index}
@@ -381,6 +206,14 @@ export default function App() {
                                     style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
                                 />
                             ))}
+                            <button className="icon-button" onClick={() => handleAddColor()}><Plus className="ic-btn"/> </button>
+                            <button className='icon-button' onClick={() => handleRemoveColor()}><DeleteIcon className='ic-btn'/></button>
+                        </div>
+                        <div className="sliders-container">
+                            <div className="slider">
+                                <p>Brightness</p>
+                                <input type="range"/>
+                            </div>
                         </div>
                     </div>
                 </div>

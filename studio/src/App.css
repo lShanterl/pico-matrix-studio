@@ -13,11 +13,22 @@
   --active-red: #f6402d;
 }
 
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/inter-font.ttf');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
+}
+*{
+  font-family: 'Inter', sans-serif;
 }
 body {
   font-family: "Segoe UI", Arial, Helvetica, sans-serif;
@@ -54,6 +65,20 @@ body {
   font-weight: 400;
   color: var(--text-color-dark);
   letter-spacing: 0.02em;
+}
+.titlebar-right{
+  display: flex;
+  align-items:center;
+  justify-content: center;
+  gap: 1rem;
+  flex-direction: row;
+}
+.power-readout{
+  color: var(--text-color-light);
+
+}
+.power-readout.over-limit{
+  color:var(--active-red);
 }
 .status-dot{
   width: 0.7rem;
@@ -342,8 +367,8 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
   background-color: transparent;
   cursor: pointer;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 0.2rem;
   transition: transform 0.1s ease;
 }
@@ -356,7 +381,7 @@ body {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.45rem;
   align-items: center;
 }
 
