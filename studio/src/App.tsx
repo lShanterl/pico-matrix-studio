@@ -288,8 +288,8 @@ export default function App() {
                     </div>
 
                     <div className="floating-toolbar">
-                        <button className="floating-toolbar-btn action-btn" title="Send Frame to Pico"
-                            onClick={async () =>  await invoke("send_frame_to_pico", { layout: layout })}
+                        <button className={`floating-toolbar-btn action-btn`} disabled={!status.connected} title="Send Frame to Pico"
+                                onClick={async () =>  await invoke("send_frame_to_pico", { layout: layout })}
                         >
                             <Play className="ic-btn" />
                         </button>

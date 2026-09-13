@@ -98,7 +98,7 @@ pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'s
 
     control.init(country_locale_matrix).await;
     control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
+        .set_power_management(cyw43::PowerManagementMode::None)
         .await;
 
     info!("Scanning for nearby Wi-Fi networks...");

@@ -67,8 +67,12 @@ pub async fn control_task(stack: embassy_net::Stack<'static>) {
                     info!("Animation stored: {} frames @ {} fps", anim.frame_count, anim.fps);
                 }
                 Ok(Command::UploadAnimationFrame {index, frame}) => {
-                    let mut anim = STORED_ANIMATION.lock().await;
-                    anim.frames[index as usize] = frame;
+                    if (index as usize) < matrix_protocol::MAX_ANIMATION_FRAMES {
+                        let mut anim = STORED_ANIMATION.lock().await;
+                        anim.frames[index as usize] = frame;
+                    } else {
+                        info!("Rejected out-of-range animation frame index: {}", index);
+                    }
                 }
                 Ok(cmd) => {COMMAND_CHANNEL.send(cmd).await} // SetFrame, SetBrightness, SelectAnimation, PlayUploadedAnimation
                 Err(e) => info!("Bad command: {:?}", e),

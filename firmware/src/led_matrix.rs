@@ -1,4 +1,4 @@
-use matrix_protocol::{Frame, MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
+use matrix_protocol::{estimate_current_ma, Frame, MATRIX_HEIGHT, MATRIX_PIXEL_COUNT, MATRIX_WIDTH, MAX_CURRENT_MA};
 use crate::irqs::Irqs;
 use embassy_hal_internal::Peri;
 use embassy_rp::gpio::AnyPin;
@@ -17,18 +17,6 @@ pub fn xy_to_index(x: usize, y: usize) -> usize {
     }
 }
 
-// Estimates the current consumption of the LED matrix in milliamperes based on the pixel colors. Used as precaution in order not to burn the charger
-fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
-    let idle_current_ma = pixels.len() as f32;
-    let mut total_channel_sum = 0u32;
-
-    for p in pixels {
-        total_channel_sum += p.r as u32 + p.g as u32 + p.b as u32;
-    }
-    let leds_current_ma = (total_channel_sum as f32 * 20f32) / 255f32;
-    leds_current_ma as f32 + idle_current_ma as f32
-}
-
 pub struct MatrixPeripherals<P: PioPin> {
     pub pio0: Peri<'static, PIO0>,
     pub dma_ch0: Peri<'static, DMA_CH0>,
@@ -38,6 +26,7 @@ pub struct MatrixPeripherals<P: PioPin> {
 pub struct LedMatrix {
     driver: PioWs2812<'static, PIO0, 0, MATRIX_PIXEL_COUNT, Grb>,
     pixels: [RGB8; MATRIX_PIXEL_COUNT],
+    should_refresh: bool, //optimization - once a frame is set, nothing changes until the next as WS2812 doesn't need refreshing like a display it just holds the last state
 }
 
 impl LedMatrix {
@@ -61,6 +50,7 @@ impl LedMatrix {
         Self {
             driver,
             pixels: [RGB8::default(); MATRIX_PIXEL_COUNT],
+            should_refresh: true,
         }
     }
 
@@ -70,14 +60,17 @@ impl LedMatrix {
 
     pub fn set(&mut self, x: usize, y: usize, color: RGB8) {
         self.pixels[xy_to_index(x, y)] = color;
+        self.should_refresh = true;
     }
 
     pub fn set_color(&mut self, color: RGB8) {
         self.pixels = [color; MATRIX_PIXEL_COUNT];
+        self.should_refresh = true;
     }
 
     pub fn set_pixels(&mut self, pixels: [RGB8; MATRIX_PIXEL_COUNT]) {
         self.pixels = pixels;
+        self.should_refresh = true;
     }
 
     pub fn set_frame(&mut self, frame: &Frame) {
@@ -86,21 +79,28 @@ impl LedMatrix {
                 self.pixels[xy_to_index(x, y)] = frame[y * MATRIX_WIDTH + x];
             }
         }
-    }
-
-    pub fn estimate_current_ma(&self) -> f32 {
-        estimate_current_ma(&self.pixels)
+        self.should_refresh = true;
     }
 
     pub async fn show(&mut self) {
-        let current = self.estimate_current_ma();
+        if(!self.should_refresh) {
+            return;
+        }
+
+        let mut corrected = self.pixels;
+        matrix_protocol::gamma_correct(&mut corrected);
+
+        let current = matrix_protocol::estimate_current_ma(&corrected);
+
         if current > MAX_CURRENT_MA as f32 {
             info!(
                 "Skipped current frame: estimated amperage: {} mA is higher than {} mA limit",
                 current, MAX_CURRENT_MA
             );
+            self.should_refresh = false; // don't keep trying the same rejected frame every tick
             return;
         }
-        self.driver.write(&self.pixels).await;
+        self.driver.write(&corrected).await;
+        self.should_refresh = false;
     }
 }

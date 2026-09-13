@@ -26,6 +26,8 @@ serialport = "4"
 matrix-protocol = { path = "../../shared" }
 bytemuck = {version = "1.25.2", features = ["derive"] }
 smart-leds = "0.4.0"
+libm = "0.2.16"
+tokio = {version = "1.53.1", features = ["net"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
