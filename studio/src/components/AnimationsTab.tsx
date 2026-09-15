@@ -1,11 +1,12 @@
 import {Plus, Trash, Pencil} from "lucide-react";
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import AnimationFrame from "./AnimationFrame.tsx";
 import {Animation} from "../hooks/useAnimationLibrary.ts";
 import {RGB} from "../types.ts";
 
 interface AnimationsTabProps {
     frames: RGB[][];
+    onChangeFps: (id: string, fps: number) => void;
     activeFrameIndex: number;
     onAddFrame: () => void;
     onChangeFrame: (index: number) => void;
@@ -17,26 +18,40 @@ interface AnimationsTabProps {
     onNewAnimation: () => void;
     onRenameAnimation: (id: string, name: string) => void;
     onDeleteAnimation: (id: string) => void;
+
 }
 
-export default function AnimationsTab({frames, activeFrameIndex, onAddFrame, onChangeFrame, onDeleteFrame, animations, activeAnimationId, onSelectAnimation, onNewAnimation, onRenameAnimation, onDeleteAnimation,}: AnimationsTabProps) {
+export default function AnimationsTab({frames, activeFrameIndex, onAddFrame, onChangeFrame, onDeleteFrame, animations, activeAnimationId, onSelectAnimation, onNewAnimation, onRenameAnimation, onDeleteAnimation, onChangeFps}: AnimationsTabProps) {
     const [isEditingName, setIsEditingName] = useState(false);
     const [draftName, setDraftName] = useState("");
 
     const activeAnimation = animations.find((a) => a.id === activeAnimationId) ?? null;
 
-    const startEditing = () => {
+    const [draftFps, setDraftFps] = useState<number>(activeAnimation?.fps ?? 1);
+
+
+    const startEditingName = () => {
         if (!activeAnimation) return;
         setDraftName(activeAnimation.name);
         setIsEditingName(true);
     };
 
-    const commitEditing = () => {
+    const commitAnimationRename = () => {
         if (activeAnimation && draftName.trim()) {
             onRenameAnimation(activeAnimation.id, draftName.trim());
         }
         setIsEditingName(false);
     };
+
+    const commitFpsChange = (value : number) => {
+        if(activeAnimation){
+            onChangeFps(activeAnimation.id, value);
+        }
+    }
+
+    useEffect(() => {
+        setDraftFps(activeAnimation?.fps ?? 1);
+    },[activeAnimation?.id, activeAnimation?.fps]);
 
     return (
         <div className="animations-container">
@@ -67,6 +82,7 @@ export default function AnimationsTab({frames, activeFrameIndex, onAddFrame, onC
             </div>
 
             {activeAnimation && (
+                <>
                 <div className="animation-name-row">
                     {isEditingName ? (
                         <input
@@ -74,16 +90,20 @@ export default function AnimationsTab({frames, activeFrameIndex, onAddFrame, onC
                             value={draftName}
                             autoFocus
                             onChange={(e) => setDraftName(e.currentTarget.value)}
-                            onBlur={commitEditing}
-                            onKeyDown={(e) => e.key === "Enter" && commitEditing()}
+                            onBlur={commitAnimationRename}
+                            onKeyDown={(e) => e.key === "Enter" && commitAnimationRename()}
                         />
                     ) : (
-                        <button className="animation-name-btn" onClick={startEditing}>
+                        <button className="animation-name-btn" onClick={startEditingName}>
                             {activeAnimation.name}
                             <Pencil className="ic-btn-small" />
                         </button>
                     )}
                 </div>
+                    <div className="animation-name-row">
+                        <input type="range" onChange={(e) => commitFpsChange(Number(e.target.value))} value={draftFps} min={1} max={60} />
+                    </div>
+                </>
             )}
 
             <div className="frames-list" >

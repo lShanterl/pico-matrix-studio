@@ -5,6 +5,7 @@ export interface Animation {
     id: string;
     name: string;
     frames: RGB[][];
+    fps: number;
 }
 
 const STORAGE_KEY = "pixelart-animations";
@@ -35,8 +36,6 @@ export function useAnimationLibrary() {
         () => loadFromStorage()[0]?.id ?? null
     );
 
-
-
     useEffect(() => {
         persistToStorage(animations);
     }, [animations]);
@@ -44,7 +43,7 @@ export function useAnimationLibrary() {
     const activeAnimation = animations.find((a) => a.id === activeAnimationId) ?? null;
 
     const createAnimation = (name: string, frames: RGB[][]) => {
-        const animation: Animation = { id: crypto.randomUUID(), name, frames };
+        const animation: Animation = { id: crypto.randomUUID(), name, frames, fps: 1 };
         setAnimations((prev) => [...prev, animation]);
         setActiveAnimationId(animation.id);
         return animation;
@@ -60,6 +59,10 @@ export function useAnimationLibrary() {
     const renameAnimation = (id: string, name: string) => {
         setAnimations((prev) => prev.map((a) => (a.id === id ? { ...a, name } : a)));
     };
+
+    const changeFps = (id:string, fps: number) =>{
+        setAnimations((prev) => prev.map((a) => (a.id === id ? {...a, fps} : a)));
+    }
 
     const deleteAnimation = (id: string) => {
         setAnimations((prev) => prev.filter((a) => a.id !== id));
@@ -83,5 +86,6 @@ export function useAnimationLibrary() {
         renameAnimation,
         deleteAnimation,
         selectAnimation,
+        changeFps,
     };
 }

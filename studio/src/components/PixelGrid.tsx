@@ -2,7 +2,7 @@ import {RGB} from "../types.ts";
 
 interface PixelGridProps {
     layout: RGB[];
-    onMouseDown: (index: number) => void;
+    onMouseDown: (index: number, e: React.MouseEvent<HTMLDivElement>) => void;
     onMouseEnter: (index: number) => void;
 }
 
@@ -15,7 +15,7 @@ export default function PixelGrid({ layout, onMouseDown, onMouseEnter }: PixelGr
                         key={i}
                         className="pixel-grid-item"
                         style={{ backgroundColor: `rgb(${pixel.r}, ${pixel.g}, ${pixel.b})` }}
-                        onMouseDown={() => onMouseDown(i)}
+                        onMouseDown={(e) => onMouseDown(i, e)}
                         onMouseEnter={() => onMouseEnter(i)}
                     />
                 ))}

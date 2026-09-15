@@ -162,5 +162,6 @@ export function usePixelLayout() {
         addFrame,
         deleteFrame,
         loadFrames,
+        DEFAULT_RGB
     };
 }

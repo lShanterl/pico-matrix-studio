@@ -13,6 +13,12 @@ import ColorTools from "./components/ColorTools.tsx";
 import Settings from "./components/Settings.tsx";
 import AnimationsTab from "./components/AnimationsTab.tsx";
 
+enum MouseActionType {
+    Draw = 0,
+    MiddleClick = 1,
+    Erase= 2
+}
+
 export default function App() {
     const pixels = usePixelLayout();
     const library = useAnimationLibrary();
@@ -26,7 +32,7 @@ export default function App() {
     const [areSettingsOpen, setAreSettingsOpen] = useState(false);
     const [activeTool, setActiveTool] = useState<Tools>(Tools.Pencil);
 
-    const [fps, setFps] = useState<number>();
+    const mouseActionRef = useRef<MouseActionType | null>(null);
 
     // make sure there's always at least one animation to save into
     useEffect(() => {
@@ -61,14 +67,19 @@ export default function App() {
         }
     }
 
-    const handleMouseDown = (index: number): void => {
+    const handleMouseDown = (index: number, e : React.MouseEvent<HTMLDivElement>): void => {
         initialMatrixRef.current = [...pixels.layout];
         setDrawing(true);
+
+        mouseActionRef.current = e.button;
+
         useTool(index);
+
         addEventListener("mouseup", handleMouseUp);
     };
 
     const handleMouseEnter = (index: number): void => {
+
         if (isDrawing && (activeTool === Tools.Pencil || activeTool === Tools.Eraser)) {
             useTool(index);
         }
@@ -76,15 +87,17 @@ export default function App() {
 
     const handleMouseUp = (): void => {
         setDrawing(false);
+        mouseActionRef.current = null;
         pixels.commitStroke(initialMatrixRef.current);
         window.removeEventListener("mouseup", handleMouseUp);
     }
 
     const useTool = (index: number) => {
+        const color = mouseActionRef.current === MouseActionType.Draw ? activeColor : pixels.DEFAULT_RGB;
         switch (activeTool) {
-            case Tools.Pencil: pixels.drawPixel(index, activeColor); break;
+            case Tools.Pencil: pixels.drawPixel(index, color); break;
             case Tools.Eraser: pixels.erasePixel(index); break;
-            case Tools.Bucket: pixels.bucketFill(index, activeColor); break;
+            case Tools.Bucket: pixels.bucketFill(index, color); break;
             case Tools.Pipette: setActiveColor(pixels.layout[index]); break;
         }
     };
@@ -132,6 +145,7 @@ export default function App() {
                     <span className="sidebar-title">Menu</span>
                     <AnimationsTab
                         frames={pixels.frames}
+                        onChangeFps={library.changeFps}
                         activeFrameIndex={pixels.activeFrameIndex}
                         onAddFrame={pixels.addFrame}
                         onChangeFrame={pixels.changeFrame}
@@ -153,7 +167,7 @@ export default function App() {
                     />
                     <FloatingToolbar
                         connected={status.connected}
-                        onSend={() => invoke("send_frame_to_pico", { frames: pixels.frames, fps: 1})}
+                        onSend={() => invoke("send_frame_to_pico", { frames: pixels.frames, fps: library.activeAnimation?.fps})}
                         activeTool={activeTool}
                         onToolChange={setActiveTool}
                         onUndo={pixels.undo}
