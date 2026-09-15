@@ -57,7 +57,7 @@ async fn main(spawner: Spawner) -> ! {
 
     let mut anim_idx = 0;
     let mut animation = animations::RotatingPlasmaAnimation;
-    let mut mode = Mode::Procedural;
+    let mut mode = Mode::Live;
 
     loop {
         if let Ok(cmd) = COMMAND_CHANNEL.try_receive() {

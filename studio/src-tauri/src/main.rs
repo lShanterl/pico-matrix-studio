@@ -36,37 +36,121 @@ pub struct RGB {
 }
 
 #[tauri::command]
-async fn send_frame_to_pico(state: tauri::State<'_,NetworkState>, layout: Vec<RGB>) -> Result<(), String> {
+async fn send_frame_to_pico(state: tauri::State<'_,NetworkState>, frames: Vec<Vec<RGB>>, fps: u32) -> Result<(), String> {
     let mut guard = state.0.lock().await;
 
     if let Some(stream) = guard.as_mut() {
         // convert to smart-leds RGB8
-        let pixels = layout.iter().map(|p| RGB8{ r: p.r, g: p.g, b: p.b }).collect::<Vec<_>>();
+        let pixel_frames = frames
+            .into_iter()
+            .map(|frame|
+                frame.iter()
+                    .map(|p| RGB8{ r: p.r, g: p.g, b: p.b })
+                    .collect::<Vec<_>>())
+            .collect::<Vec<_>>();
 
-        let frame: Frame = match pixels.try_into() {
-            Ok(frame) => frame,
-            Err(_) => {
-                eprintln!("Layout size does not match MATRIX_PIXEL_COUNT");
-                return Result::Err(String::from("Layout size does not match MATRIX_PIXEL_COUNT"));
+
+
+        if pixel_frames.len() == 1{
+            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
+
+            let frame: Frame = match pixel_frames[0].as_slice().try_into() {
+                Ok(frame) => frame,
+                Err(_) => {
+                    eprintln!("Layout size does not match MATRIX_PIXEL_COUNT");
+                    return Result::Err(String::from("Layout size does not match MATRIX_PIXEL_COUNT"));
+                }
+            };
+
+            let command = Command::SetFrame(frame);
+            let bytes_written = command.encode(&mut send_buffer);
+
+            let len_prefix = (bytes_written as u16).to_be_bytes();
+
+            if let Err(e) = stream.write_all(&len_prefix).await {
+                eprintln!("Failed to send length prefix: {}", e);
+                return Err(format!("Failed to send frame: {}", e));
             }
-        };
-
-        let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-        let command = Command::SetFrame(frame);
-        let bytes_written = command.encode(&mut send_buffer);
-
-        let len_prefix = (bytes_written as u16).to_be_bytes();
-
-        if let Err(e) = async move {
-            stream.write_all(&len_prefix).await?;
-            stream.write_all(&send_buffer[..bytes_written]).await?;
-            Ok::<(), std::io::Error>(())
-        }.await {
-            eprintln!("Failed to send frame: {}", e);
-            return Err(format!("Failed to send frame: {}", e));
+            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
+                eprintln!("Failed to send frame data: {}", e);
+                return Err(format!("Failed to send frame: {}", e));
+            }
         }
 
-        println!("Sent frame");
+        if(pixel_frames.len() > 1) {
+            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
+
+            let command = Command::UploadAnimationStart { frame_count: pixel_frames.len() as u8, fps: fps as u8 };
+            let bytes_written = command.encode(&mut send_buffer);
+
+            let len_prefix = (bytes_written as u16).to_be_bytes();
+
+            if let Err(e) = stream.write_all(&len_prefix).await {
+                eprintln!("Failed to send length prefix: {}", e);
+                return Err(format!("Failed to send frame: {}", e));
+            }
+            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
+                eprintln!("Failed to send start animation data: {}", e);
+                return Err(format!("Failed to send start animation data: {}", e));
+            }
+
+            for (index, frame) in pixel_frames.iter().enumerate(){
+                let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
+
+                let frame: Frame = match frame.as_slice().try_into() {
+                    Ok(frame) => frame,
+                    Err(_) => {
+                        eprintln!("Layout size does not match MATRIX_PIXEL_COUNT");
+                        return Result::Err(String::from("Layout size does not match MATRIX_PIXEL_COUNT"));
+                    }
+                };
+
+                let command = Command::UploadAnimationFrame {index: index as u8, frame: frame };
+                let bytes_written = command.encode(&mut send_buffer);
+
+                let len_prefix = (bytes_written as u16).to_be_bytes();
+
+                if let Err(e) = stream.write_all(&len_prefix).await {
+                    eprintln!("Failed to send length prefix: {}", e);
+                    return Err(format!("Failed to send frame: {}", e));
+                }
+
+                if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
+                    eprintln!("Failed to send frame data: {}", e);
+                    return Err(format!("Failed to send frame: {}", e));
+                }
+            }
+
+            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
+            let command = Command::UploadAnimationEnd;
+            let bytes_written = command.encode(&mut send_buffer);
+
+            let len_prefix = (bytes_written as u16).to_be_bytes();
+            if let Err(e) = stream.write_all(&len_prefix).await {
+                eprintln!("Failed to send length prefix: {}", e);
+                return Err(format!("Failed to end frame upload: {}", e));
+            }
+
+            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
+                eprintln!("Failed to send frame data: {}", e);
+                return Err(format!("Failed to end frame upload: {}", e));
+            }
+
+            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
+            let command = Command::PlayUploadedAnimation;
+            let bytes_written = command.encode(&mut send_buffer);
+            let len_prefix = (bytes_written as u16).to_be_bytes();
+            if let Err(e) = stream.write_all(&len_prefix).await {
+                eprintln!("Failed to send length prefix: {}", e);
+                return Err(format!("Failed to end frame upload: {}", e));
+            }
+            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
+                eprintln!("Failed to send start animation data: {}", e);
+                return Err(format!("Failed to end frame upload: {}", e));
+            }
+
+        }
+
     }
     return Result::Ok(());
 }

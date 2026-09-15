@@ -72,8 +72,9 @@ pub async fn init(spawner: Spawner, usb: Peri<'static, USB>) {
     Timer::after(Duration::from_millis(2000)).await;
 
     spawner.spawn(logger_task(class).unwrap());
-    Timer::after(Duration::from_millis(1000)).await;
 
+    #[cfg(feature = "usb-debug")]
+    Timer::after(Duration::from_millis(1000)).await;
 
     info!("--- Terminal is connected! Starting further configuration of Pico W ---"); // logging is effectively free when nobody's listening. There's no runtime reason to strip it
 }

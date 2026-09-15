@@ -11,7 +11,6 @@ export interface ConnectionStatus {
 }
 export const IP = "192.168.1.50";
 
-export const DEFAULT_RGB: RGB = { r: 0, g: 0, b: 0 };
 export const ACTIVE_COLOR: RGB = { r: 239, g: 68, b: 68 };
 
 export const builtInColors: RGB[] = [
@@ -22,13 +21,6 @@ export const builtInColors: RGB[] = [
     { r: 61, g: 220, b: 132 },
     { r: 194, g: 91, b: 222 },
 ];
-
-export const sidebarTools: string[] = ["Draw", "Animations"];
-
-export const enum MenuItems {
-    Draw,
-    Animations,
-}
 
 export const enum Tools {
     Pencil,

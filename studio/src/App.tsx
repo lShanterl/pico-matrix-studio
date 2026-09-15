@@ -1,25 +1,21 @@
-import {useRef, useState} from "react";
+import { useRef, useState, useEffect } from "react";
 import "./App.css";
-import {Settings} from "lucide-react";
-import {invoke} from "@tauri-apps/api/core";
-import {usePicoConnection} from "./hooks/usePicoConnection.ts";
-import {
-    ACTIVE_COLOR,
-    IP,
-    MenuItems,
-    RGB, sidebarTools,
-    Tools
-} from "./types.ts";
-import {usePixelLayout} from "./hooks/usePixelLayout.ts";
+import { Settings as SettingsIcon } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { usePicoConnection } from "./hooks/usePicoConnection.ts";
+import { ACTIVE_COLOR, IP, RGB, Tools } from "./types.ts";
+import { usePixelLayout, createBlankFrame } from "./hooks/usePixelLayout.ts";
+import { useAnimationLibrary } from "./hooks/useAnimationLibrary.ts";
 import FloatingToolbar from "./components/FloatingToolbar.tsx";
 import PixelGrid from "./components/PixelGrid.tsx";
-import {usePowerEstimate} from "./hooks/usePowerEstimate.ts";
+import { usePowerEstimate } from "./hooks/usePowerEstimate.ts";
 import ColorTools from "./components/ColorTools.tsx";
-
+import Settings from "./components/Settings.tsx";
+import AnimationsTab from "./components/AnimationsTab.tsx";
 
 export default function App() {
-
     const pixels = usePixelLayout();
+    const library = useAnimationLibrary();
     const { status, connect, disconnect } = usePicoConnection();
     const power = usePowerEstimate(pixels.layout);
 
@@ -27,13 +23,33 @@ export default function App() {
     const initialMatrixRef = useRef<RGB[]>([]);
 
     const [activeColor, setActiveColor] = useState<RGB>(ACTIVE_COLOR);
-    const [activeMenu, setActiveMenu] = useState<MenuItems>(MenuItems.Draw);
     const [areSettingsOpen, setAreSettingsOpen] = useState(false);
     const [activeTool, setActiveTool] = useState<Tools>(Tools.Pencil);
 
+    const [fps, setFps] = useState<number>();
 
+    // make sure there's always at least one animation to save into
+    useEffect(() => {
+        if (library.animations.length === 0) {
+            library.createAnimation("Animation 1", pixels.frames);
+        }
+    }, []);
 
-    const handleConnectClick = async () =>{
+    useEffect(() => {
+        if (library.activeAnimation) {
+            pixels.loadFrames(library.activeAnimation.frames);
+        }
+    }, [library.activeAnimationId]);
+
+    // save the animation with debounce
+    useEffect(() => {
+        const id = setTimeout(() => {
+            library.updateActiveAnimationFrames(pixels.frames);
+        }, 400);
+        return () => clearTimeout(id);
+    }, [pixels.frames]);
+
+    const handleConnectClick = async () => {
         if (status.connected) {
             await disconnect();
         } else {
@@ -47,10 +63,8 @@ export default function App() {
 
     const handleMouseDown = (index: number): void => {
         initialMatrixRef.current = [...pixels.layout];
-
         setDrawing(true);
         useTool(index);
-
         addEventListener("mouseup", handleMouseUp);
     };
 
@@ -60,7 +74,7 @@ export default function App() {
         }
     };
 
-    const handleMouseUp = (): void =>{
+    const handleMouseUp = (): void => {
         setDrawing(false);
         pixels.commitStroke(initialMatrixRef.current);
         window.removeEventListener("mouseup", handleMouseUp);
@@ -75,8 +89,20 @@ export default function App() {
         }
     };
 
+    const handleSelectAnimation = (id: string) => {
+        library.selectAnimation(id);
+    };
 
+    const handleNewAnimation = () => {
+        const name = `Animation ${library.animations.length + 1}`;
+        library.createAnimation(name, [createBlankFrame()]);
+    };
 
+    const handleDeleteAnimation = (id: string) => {
+        if (library.animations.length <= 1) return;
+        if (!window.confirm("Delete this animation? This can't be undone.")) return;
+        library.deleteAnimation(id);
+    };
 
     return (
         <div className="app">
@@ -94,34 +120,29 @@ export default function App() {
                         </div>
                     )}
                     <button className="icon-button" onClick={() => setAreSettingsOpen(!areSettingsOpen)} title="Settings">
-                        <Settings className="ic-btn" />
+                        <SettingsIcon className="ic-btn" />
                     </button>
                 </div>
-
             </div>
 
-            {areSettingsOpen && (
-                <div className="settings-pop-up-container">
-
-                </div>
-            )}
+            {areSettingsOpen && <Settings/>}
 
             <div className="app-body">
                 <div className="sidebar">
                     <span className="sidebar-title">Menu</span>
-                    <div className="sidebar-tools">
-                        {sidebarTools.map((tool, index) => (
-                            <button
-                                className={`sidebar-tool-btn ${activeMenu === index ? "active" : ""}`}
-                                key={tool}
-                                onClick={() => {
-                                    setActiveMenu(index);
-                                }}
-                            >
-                                {tool}
-                            </button>
-                        ))}
-                    </div>
+                    <AnimationsTab
+                        frames={pixels.frames}
+                        activeFrameIndex={pixels.activeFrameIndex}
+                        onAddFrame={pixels.addFrame}
+                        onChangeFrame={pixels.changeFrame}
+                        onDeleteFrame={pixels.deleteFrame}
+                        animations={library.animations}
+                        activeAnimationId={library.activeAnimationId}
+                        onSelectAnimation={handleSelectAnimation}
+                        onNewAnimation={handleNewAnimation}
+                        onRenameAnimation={library.renameAnimation}
+                        onDeleteAnimation={handleDeleteAnimation}
+                    />
                 </div>
 
                 <div className="workspace">
@@ -132,7 +153,7 @@ export default function App() {
                     />
                     <FloatingToolbar
                         connected={status.connected}
-                        onSend={() => invoke("send_frame_to_pico", { layout: pixels.layout })}
+                        onSend={() => invoke("send_frame_to_pico", { frames: pixels.frames, fps: 1})}
                         activeTool={activeTool}
                         onToolChange={setActiveTool}
                         onUndo={pixels.undo}
@@ -141,7 +162,6 @@ export default function App() {
                         canRedo={pixels.canRedo}
                         onClear={pixels.clear}
                     />
-
                 </div>
 
                 <div className="transform-matrix-container">

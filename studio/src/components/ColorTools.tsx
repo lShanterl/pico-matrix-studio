@@ -14,7 +14,7 @@ export default function ColorTools(
     const [availableColors, setAvailableColors] = useState<RGB[]>([...builtInColors]);
 
     const colorsMatch = (a: RGB, b: RGB): boolean => {
-        return a.r === b.r && b.g === b.g && b.b === b.b;
+        return a.r === b.r && a.g === b.g && a.b === b.b;
     }
 
     const rgbToHex = (color: RGB): string => {
