@@ -2,10 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bytemuck::{Pod, Zeroable};
-use matrix_protocol::{Command, Frame, MATRIX_PIXEL_COUNT, MAX_COMMAND_BYTES, PORT};
+use matrix_protocol::{Command, Frame, LEN_PREFIX_BYTES, MATRIX_PIXEL_COUNT, MAX_COMMAND_BYTES, MAX_WIRE_BYTES, PORT};
 use serde::Deserialize;
 use serialport::SerialPort;
-use smart_leds::{RGB8};
+use smart_leds::{ RGB8};
 use std::io::Write;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -35,124 +35,54 @@ pub struct RGB {
     pub b: u8,
 }
 
+fn to_frame(pixels: &[RGB]) -> Result<Frame, String> {
+    if pixels.len() != MATRIX_PIXEL_COUNT {
+        return Err("Layout size does not match MATRIX_PIXEL_COUNT".into());
+    }
+    let mut frame = [RGB8::default(); MATRIX_PIXEL_COUNT];
+    for (dst, src) in frame.iter_mut().zip(pixels) {
+        *dst = RGB8 { r: src.r, g: src.g, b: src.b };
+    }
+    Ok(frame)
+}
+
 #[tauri::command]
 async fn send_frame_to_pico(state: tauri::State<'_,NetworkState>, frames: Vec<Vec<RGB>>, fps: u32) -> Result<(), String> {
+
+    // convert to smart-leds RGB8 first, before connection to ensure safety
+    let frames = frames
+        .iter()
+        .map(|f| to_frame(f))
+        .collect::<Result<Vec<Frame>, _>>()?;
+
+    //todo: verify frames length - need to take into the account the spare memory on pico  & whether the frames can be longer than 255
+
     let mut guard = state.0.lock().await;
 
-    if let Some(stream) = guard.as_mut() {
-        // convert to smart-leds RGB8
-        let pixel_frames = frames
-            .into_iter()
-            .map(|frame|
-                frame.iter()
-                    .map(|p| RGB8{ r: p.r, g: p.g, b: p.b })
-                    .collect::<Vec<_>>())
-            .collect::<Vec<_>>();
+    let stream = guard.as_mut().ok_or("Not connected")?;
 
+    match frames.len(){
+        0=> Ok(()),
+        1=> {
+            write_command(stream,&Command::SetFrame(frames[0])).await
+        },
+        n=>{
+            write_command(stream, &Command::UploadAnimationStart {
+                frame_count: n as u8,
+                fps: fps as u8,
+            }).await?;
 
-
-        if pixel_frames.len() == 1{
-            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-
-            let frame: Frame = match pixel_frames[0].as_slice().try_into() {
-                Ok(frame) => frame,
-                Err(_) => {
-                    eprintln!("Layout size does not match MATRIX_PIXEL_COUNT");
-                    return Result::Err(String::from("Layout size does not match MATRIX_PIXEL_COUNT"));
-                }
-            };
-
-            let command = Command::SetFrame(frame);
-            let bytes_written = command.encode(&mut send_buffer);
-
-            let len_prefix = (bytes_written as u16).to_be_bytes();
-
-            if let Err(e) = stream.write_all(&len_prefix).await {
-                eprintln!("Failed to send length prefix: {}", e);
-                return Err(format!("Failed to send frame: {}", e));
+            for (i, frame) in frames.into_iter().enumerate() {
+                write_command(stream, &Command::UploadAnimationFrame {
+                    index: i as u8,
+                    frame,
+                }).await?;
             }
-            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
-                eprintln!("Failed to send frame data: {}", e);
-                return Err(format!("Failed to send frame: {}", e));
-            }
+
+            write_command(stream, &Command::UploadAnimationEnd).await?;
+            write_command(stream, &Command::PlayUploadedAnimation).await
         }
-
-        if(pixel_frames.len() > 1) {
-            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-
-            let command = Command::UploadAnimationStart { frame_count: pixel_frames.len() as u8, fps: fps as u8 };
-            let bytes_written = command.encode(&mut send_buffer);
-
-            let len_prefix = (bytes_written as u16).to_be_bytes();
-
-            if let Err(e) = stream.write_all(&len_prefix).await {
-                eprintln!("Failed to send length prefix: {}", e);
-                return Err(format!("Failed to send frame: {}", e));
-            }
-            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
-                eprintln!("Failed to send start animation data: {}", e);
-                return Err(format!("Failed to send start animation data: {}", e));
-            }
-
-            for (index, frame) in pixel_frames.iter().enumerate(){
-                let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-
-                let frame: Frame = match frame.as_slice().try_into() {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        eprintln!("Layout size does not match MATRIX_PIXEL_COUNT");
-                        return Result::Err(String::from("Layout size does not match MATRIX_PIXEL_COUNT"));
-                    }
-                };
-
-                let command = Command::UploadAnimationFrame {index: index as u8, frame: frame };
-                let bytes_written = command.encode(&mut send_buffer);
-
-                let len_prefix = (bytes_written as u16).to_be_bytes();
-
-                if let Err(e) = stream.write_all(&len_prefix).await {
-                    eprintln!("Failed to send length prefix: {}", e);
-                    return Err(format!("Failed to send frame: {}", e));
-                }
-
-                if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
-                    eprintln!("Failed to send frame data: {}", e);
-                    return Err(format!("Failed to send frame: {}", e));
-                }
-            }
-
-            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-            let command = Command::UploadAnimationEnd;
-            let bytes_written = command.encode(&mut send_buffer);
-
-            let len_prefix = (bytes_written as u16).to_be_bytes();
-            if let Err(e) = stream.write_all(&len_prefix).await {
-                eprintln!("Failed to send length prefix: {}", e);
-                return Err(format!("Failed to end frame upload: {}", e));
-            }
-
-            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
-                eprintln!("Failed to send frame data: {}", e);
-                return Err(format!("Failed to end frame upload: {}", e));
-            }
-
-            let mut send_buffer = [0u8; MAX_COMMAND_BYTES];
-            let command = Command::PlayUploadedAnimation;
-            let bytes_written = command.encode(&mut send_buffer);
-            let len_prefix = (bytes_written as u16).to_be_bytes();
-            if let Err(e) = stream.write_all(&len_prefix).await {
-                eprintln!("Failed to send length prefix: {}", e);
-                return Err(format!("Failed to end frame upload: {}", e));
-            }
-            if let Err(e) = stream.write_all(&send_buffer[..bytes_written]).await {
-                eprintln!("Failed to send start animation data: {}", e);
-                return Err(format!("Failed to end frame upload: {}", e));
-            }
-
-        }
-
     }
-    return Result::Ok(());
 }
 
 #[tauri::command]
@@ -223,11 +153,44 @@ fn estimate_power(layout: Vec<RGB>) -> PowerEstimate {
     let mut pixels: Vec<RGB8> = layout.into_iter().map(|p| RGB8 { r: p.r, g: p.g, b: p.b }).collect();
     matrix_protocol::gamma_correct(&mut pixels);
     let current_ma = matrix_protocol::estimate_current_ma(&pixels);
+    //todo: apply brightness limited, then return powerReport and send additional data to the powerEstimate
     PowerEstimate {
         current_ma,
         max_current_ma: matrix_protocol::MAX_CURRENT_MA,
         over_limit: current_ma > matrix_protocol::MAX_CURRENT_MA as f32,
     }
+}
+
+#[tauri::command]
+async fn set_brightness(state: tauri::State<'_, NetworkState>, value: u8) -> Result<(), String>{
+    let command= Command::SetBrightness(value);
+    send_command(&state, command).await
+}
+
+#[tauri::command]
+async fn set_ma(state: tauri::State<'_, NetworkState>, value: u16) -> Result<(), String>{
+    let command = Command::SetAmper(value);
+    send_command(&state, command).await
+}
+
+// async fn get_ma(state: tauri::State<'_, NetworkState>) -> Result<u16, String>{
+//
+// }
+
+async fn write_command(stream: &mut TcpStream, command: &Command) -> Result<(), String>{
+    let mut buf = [0u8; MAX_WIRE_BYTES];
+    let len = command.encode(&mut buf[LEN_PREFIX_BYTES..]);
+    buf[LEN_PREFIX_BYTES..].copy_from_slice(&len.to_be_bytes());
+    stream
+        .write_all(&buf[..])
+        .await
+        .map_err(|e| format!("Failed to send command: {}", e))
+}
+
+async fn send_command(state: &NetworkState, command: Command) -> Result<(), String> {
+    let mut guard = state.0.lock().await;
+    let stream = guard.as_mut().ok_or(format!("Not connected"))?;
+    write_command(stream, &command).await
 }
 
 fn main() {
@@ -244,7 +207,9 @@ fn main() {
             connect_to_pico,
             disconnect_from_pico,
             send_frame_to_pico,
-            estimate_power
+            estimate_power,
+            set_ma,
+            set_brightness,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri app");

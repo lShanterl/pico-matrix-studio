@@ -79,6 +79,3 @@ impl StoredAnimation {
         }
     }
 }
-
-// CriticalSectionRawMutex is when data can be shared between threads and interrupts
-pub static STORED_ANIMATION: Mutex<CriticalSectionRawMutex, StoredAnimation> = Mutex::new(StoredAnimation::new());

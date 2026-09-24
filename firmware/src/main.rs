@@ -10,6 +10,7 @@ mod panic;
 mod tcp_listener;
 mod usb;
 mod wifi;
+mod storage;
 
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -17,10 +18,9 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 
 use embedded_alloc::LlffHeap as Heap;
-use log::info;
 use matrix_protocol::Command;
-use crate::animations::STORED_ANIMATION;
-use crate::Mode::Procedural;
+use smart_leds::brightness;
+use crate::storage::STATE;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -60,15 +60,29 @@ async fn main(spawner: Spawner) -> ! {
     let mut mode = Mode::Live;
 
     loop {
-        if let Ok(cmd) = COMMAND_CHANNEL.try_receive() {
+        while let Ok(cmd) = COMMAND_CHANNEL.try_receive() {
             match cmd {
                 Command::SetFrame(pixels) => {
-                    info!("set pico frame");
                     matrix.set_frame(&pixels);
                     mode = Mode::Live;
                 }
-                Command::SetBrightness(_b) => { /* apply scaling, unchanged mode */ }
-                Command::SelectAnimation(_id) => { mode = Mode::Procedural; }
+                Command::SetBrightness(b) => {
+                    let safe_level = b.clamp(0, 100);
+                    let brightness_f32 = safe_level as f32 / 100.0;
+                    let mut storage = STATE.lock().await;
+                    storage.brightness = brightness_f32;
+                    matrix.request_refresh();
+                }
+                Command::SetAmper(mA) =>{
+                    let mut storage = STATE.lock().await;
+                    storage.max_amper = mA;
+                    matrix.request_refresh();
+                }
+                Command::SelectAnimation(id) => {
+                    mode = Mode::Procedural;
+                    animation = animations::RotatingPlasmaAnimation;
+
+                }
                 Command::PlayUploadedAnimation => {
                     mode = Mode::Uploaded;
                     anim_idx = 0;
@@ -87,11 +101,11 @@ async fn main(spawner: Spawner) -> ! {
                 16 // keep last frame
             }
             Mode::Uploaded => {
-                let anim = STORED_ANIMATION.lock().await;
-                if anim.frame_count > 0 {
-                    matrix.set_frame(&anim.frames[anim_idx % anim.frame_count]);
+                let storage = STATE.lock().await;
+                if storage.custom_animation.frame_count > 0 {
+                    matrix.set_frame(&storage.custom_animation.frames[anim_idx % storage.custom_animation.frame_count]);
                     anim_idx += 1;
-                    1000 / anim.fps as u64
+                    1000 / storage.custom_animation.fps as u64
                 } else {
                     mode = Mode::Procedural; // nothing stored yet, fall back
                     16

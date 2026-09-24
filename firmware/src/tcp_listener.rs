@@ -3,8 +3,8 @@ use embassy_net::tcp::TcpSocket;
 use embassy_net::udp::PacketMetadata;
 use log::info;
 use matrix_protocol::{Command, MAX_ANIMATION_FRAMES, MAX_COMMAND_BYTES, PORT};
-use crate::animations::STORED_ANIMATION;
 use crate::COMMAND_CHANNEL;
+use crate::storage::STATE;
 
 async fn read_exact(
     socket: &mut TcpSocket<'_>,
@@ -57,24 +57,24 @@ pub async fn control_task(stack: embassy_net::Stack<'static>) {
             match Command::decode(&payload[..len]) {
                 Ok(Command::UploadAnimationStart { frame_count, fps }) =>{
                     expected_frames = frame_count.min(MAX_ANIMATION_FRAMES as u8);
-                    let mut anim = STORED_ANIMATION.lock().await;
-                    anim.frame_count = 0; // invalidate till end
-                    anim.fps = fps.max(1);
+                    let mut state = STATE.lock().await;
+                    state.custom_animation.frame_count = 0; // invalidate till end
+                    state.custom_animation.fps = fps.max(1);
                 }
                 Ok(Command::UploadAnimationEnd) =>{
-                    let mut anim = STORED_ANIMATION.lock().await;
-                    anim.frame_count = expected_frames as usize;
-                    info!("Animation stored: {} frames @ {} fps", anim.frame_count, anim.fps);
+                    let mut state = STATE.lock().await;
+                    state.custom_animation.frame_count = expected_frames as usize;
+                    info!("Animation stored: {} frames @ {} fps", state.custom_animation.frame_count, state.custom_animation.fps);
                 }
                 Ok(Command::UploadAnimationFrame {index, frame}) => {
                     if (index as usize) < matrix_protocol::MAX_ANIMATION_FRAMES {
-                        let mut anim = STORED_ANIMATION.lock().await;
-                        anim.frames[index as usize] = frame;
+                        let mut state = STATE.lock().await;
+                        state.custom_animation.frames[index as usize] = frame;
                     } else {
                         info!("Rejected out-of-range animation frame index: {}", index);
                     }
                 }
-                Ok(cmd) => {COMMAND_CHANNEL.send(cmd).await} // SetFrame, SetBrightness, SelectAnimation, PlayUploadedAnimation
+                Ok(cmd) => {COMMAND_CHANNEL.send(cmd).await} // SetFrame, SetBrightness, SetAmper, SelectAnimation, PlayUploadedAnimation
                 Err(e) => info!("Bad command: {:?}", e),
             }
 

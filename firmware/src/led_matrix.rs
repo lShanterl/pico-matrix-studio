@@ -7,6 +7,7 @@ use embassy_rp::pio::{Pio, PioPin};
 use embassy_rp::pio_programs::ws2812::{Grb, PioWs2812, PioWs2812Program, Rgb, RgbColorOrder, RgbwPioWs2812};
 use log::info;
 use smart_leds::RGB8;
+use crate::storage::STATE;
 
 // Calculates coordinates (x, y) to linear index of pixels buffer. The matrix is wired in a zig-zag pattern, so even rows are left-to-right and odd rows are right-to-left
 pub fn xy_to_index(x: usize, y: usize) -> usize {
@@ -56,6 +57,8 @@ impl LedMatrix {
 
     pub fn clear(&mut self) {
         self.pixels = [RGB8::default(); MATRIX_PIXEL_COUNT];
+        self.should_refresh = true;
+
     }
 
     pub fn set(&mut self, x: usize, y: usize, color: RGB8) {
@@ -90,17 +93,20 @@ impl LedMatrix {
         let mut corrected = self.pixels;
         matrix_protocol::gamma_correct(&mut corrected);
 
-        let current = matrix_protocol::estimate_current_ma(&corrected);
+        // dropping the state immediately to avoid waiting for the frame to be written
+        let (brightness, max_ma) = {
+            let s = STATE.lock().await;
+            (s.brightness, s.max_amper)
+        };
 
-        if current > MAX_CURRENT_MA as f32 {
-            info!(
-                "Skipped current frame: estimated amperage: {} mA is higher than {} mA limit",
-                current, MAX_CURRENT_MA
-            );
-            self.should_refresh = false; // don't keep trying the same rejected frame every tick
-            return;
-        }
+        let report = matrix_protocol::apply_brightness_limited(&mut corrected, brightness, max_ma);
+
+
         self.driver.write(&corrected).await;
         self.should_refresh = false;
+    }
+
+    pub fn request_refresh(&mut self) {
+        self.should_refresh = true;
     }
 }

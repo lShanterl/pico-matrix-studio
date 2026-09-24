@@ -88,7 +88,7 @@ export default function ColorTools(
             <div className="sliders-container">
                 <div className="slider">
                     <p>Brightness</p>
-                    <input type="range"/>
+                    <input type="range" min={0} max={100} defaultValue={100}/>
                 </div>
             </div>
         </div>

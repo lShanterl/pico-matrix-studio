@@ -2,7 +2,6 @@
   --color-panel-width: clamp(10.5rem, 18vw, 18rem);
   --menu-panel-width: clamp(10.5rem, 18vw, 18rem);
 
-
   --primary-darker: #131313;
   --primary-dark: #1a1a1f;
   --secondary-dark: #5c5c5c;
@@ -12,6 +11,20 @@
   --active-green: #96e660;
   --active-red: #f6402d;
 }
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #33333b;
+  border-radius: 10px;
+}
+
+
 
 @font-face {
   font-family: 'Inter';

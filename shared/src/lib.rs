@@ -2,12 +2,15 @@
 pub const MATRIX_WIDTH: usize = 16;
 pub const MATRIX_HEIGHT: usize = 16;
 pub const MATRIX_PIXEL_COUNT: usize = MATRIX_WIDTH * MATRIX_HEIGHT;
-pub static MAX_CURRENT_MA: u32 = 1500;
+pub static MAX_CURRENT_MA: u32 = 500; // todo: get rid of this, wire pico on device storage then send max ma through wifi when connected
 pub const MAX_ANIMATION_FRAMES: usize = 30;
 pub const FRAME_BYTES: usize = MATRIX_PIXEL_COUNT * 3; // each color
 
-// Largest single command on the wire: tag + 2-byte index + one full frame
+// Largest command payload: tag + index + one full frame (excludes length prefix)
 pub const MAX_COMMAND_BYTES: usize = 1 + 2 + FRAME_BYTES;
+pub const LEN_PREFIX_BYTES: usize = 2;
+// Largest thing written to the socket: length prefix + command payload
+pub const MAX_WIRE_BYTES: usize = MAX_COMMAND_BYTES + LEN_PREFIX_BYTES;
 pub const PORT: u16 = 7778;
 
 use smart_leds::RGB8;
@@ -41,6 +44,14 @@ pub fn gamma_correct(pixels: &mut [RGB8]) {
     }
 }
 
+pub fn scale_brightness(pixels: &mut [RGB8], s: f32) {
+    for p in pixels.iter_mut() {
+        p.r = (p.r as u16 * s as u16 / 255) as u8;
+        p.g = (p.g as u16 * s as u16 / 255) as u8;
+        p.b = (p.b as u16 * s as u16 / 255) as u8;
+    }
+}
+
 // Estimates the current consumption of the LED matrix in milliamperes based on the pixel colors. Used as precaution in order not to burn the charger
 pub fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
     let idle = pixels.len() as f32;
@@ -49,11 +60,28 @@ pub fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
     (sum as f32 * 20.0 / 255.0) + idle
 }
 
+pub struct PowerReport{
+
+}
+pub fn apply_brightness_limited(pixels: &mut [RGB8], brightness: f32, max_ma: u16) -> PowerReport {
+    let idle = pixels.len() as f32;
+    let full = estimate_current_ma(pixels) - idle;
+
+    let budget = (max_ma as f32 - idle).max(0.0);
+    let cap = if full > 0.0 {(budget / full).min(1.0)} else {1.0};
+
+    let scale = brightness.min(cap);
+    scale_brightness(pixels, scale);
+
+    PowerReport {}
+}
+
 
 #[derive(Debug)]
 pub enum Command {
     SetFrame(Frame),
     SetBrightness(u8),
+    SetAmper(u16),
     SelectAnimation(u8),
     UploadAnimationStart { frame_count: u8, fps: u8 },
     UploadAnimationFrame { index: u8, frame: Frame },
@@ -91,7 +119,6 @@ impl Command {
         match self {
             Command::SetFrame(frame) => {
                 buf[0] = 0x01;
-                //todo check whether im doing this right
                 write_pixels(&mut buf[1..], frame);
                 1 + FRAME_BYTES
             }
@@ -126,6 +153,13 @@ impl Command {
                 buf[0] = 0x07;
                 1
             }
+            Command::SetAmper(value) => {
+                buf[0] = 0x08;
+                let value_buf = value.to_be_bytes();
+                buf[1] = value_buf[0];
+                buf[2] = value_buf[1];
+                3
+            }
 
         }
     }
@@ -159,6 +193,12 @@ impl Command {
             }
             0x07 =>{
                 Ok(Command::PlayUploadedAnimation)
+            }
+            0x08 =>{
+                if(buf.len() < 3) { return Err(DecodeError::TooShort); }
+                // reconstructing the u16 from the two bytes sent
+                let value = u16::from_be_bytes([buf[1], buf[2]]);
+                Ok(Command::SetAmper(value))
             }
             _ => Err(DecodeError::UnknownTag(tag)),
         }
