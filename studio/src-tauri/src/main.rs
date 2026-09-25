@@ -177,12 +177,15 @@ async fn set_ma(state: tauri::State<'_, NetworkState>, value: u16) -> Result<(),
 //
 // }
 
-async fn write_command(stream: &mut TcpStream, command: &Command) -> Result<(), String>{
+async fn write_command(stream: &mut TcpStream, command: &Command) -> Result<(), String> {
     let mut buf = [0u8; MAX_WIRE_BYTES];
     let len = command.encode(&mut buf[LEN_PREFIX_BYTES..]);
-    buf[LEN_PREFIX_BYTES..].copy_from_slice(&len.to_be_bytes());
+
+    let len_bytes = (len as u16).to_be_bytes();
+    buf[..LEN_PREFIX_BYTES].copy_from_slice(&len_bytes);
+
     stream
-        .write_all(&buf[..])
+        .write_all(&buf[..LEN_PREFIX_BYTES + len])   // trim to the real message size
         .await
         .map_err(|e| format!("Failed to send command: {}", e))
 }

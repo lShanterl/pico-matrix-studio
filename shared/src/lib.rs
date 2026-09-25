@@ -46,12 +46,11 @@ pub fn gamma_correct(pixels: &mut [RGB8]) {
 
 pub fn scale_brightness(pixels: &mut [RGB8], s: f32) {
     for p in pixels.iter_mut() {
-        p.r = (p.r as u16 * s as u16 / 255) as u8;
-        p.g = (p.g as u16 * s as u16 / 255) as u8;
-        p.b = (p.b as u16 * s as u16 / 255) as u8;
+        p.r = (p.r as f32 * s) as u8;
+        p.g = (p.g as f32 * s) as u8;
+        p.b = (p.b as f32 * s) as u8;
     }
 }
-
 // Estimates the current consumption of the LED matrix in milliamperes based on the pixel colors. Used as precaution in order not to burn the charger
 pub fn estimate_current_ma(pixels: &[RGB8]) -> f32 {
     let idle = pixels.len() as f32;
@@ -69,7 +68,6 @@ pub fn apply_brightness_limited(pixels: &mut [RGB8], brightness: f32, max_ma: u1
 
     let budget = (max_ma as f32 - idle).max(0.0);
     let cap = if full > 0.0 {(budget / full).min(1.0)} else {1.0};
-
     let scale = brightness.min(cap);
     scale_brightness(pixels, scale);
 
