@@ -4,7 +4,7 @@ use embassy_net::udp::PacketMetadata;
 use log::info;
 use matrix_protocol::{Command, MAX_ANIMATION_FRAMES, MAX_COMMAND_BYTES, PORT};
 use crate::COMMAND_CHANNEL;
-use crate::storage::STATE;
+use crate::storage::{SAVE_CHANNEL, STATE};
 
 async fn read_exact(
     socket: &mut TcpSocket<'_>,
@@ -62,9 +62,12 @@ pub async fn control_task(stack: embassy_net::Stack<'static>) {
                     state.custom_animation.fps = fps.max(1);
                 }
                 Ok(Command::UploadAnimationEnd) =>{
-                    let mut state = STATE.lock().await;
-                    state.custom_animation.frame_count = expected_frames as usize;
-                    info!("Animation stored: {} frames @ {} fps", state.custom_animation.frame_count, state.custom_animation.fps);
+                    {
+                        let mut state = STATE.lock().await;
+                        state.custom_animation.frame_count = expected_frames as usize;
+                        info!("Animation stored: {} frames @ {} fps", state.custom_animation.frame_count, state.custom_animation.fps);
+                    }
+                    let _ = SAVE_CHANNEL.try_send(());
                 }
                 Ok(Command::UploadAnimationFrame {index, frame}) => {
                     if (index as usize) < matrix_protocol::MAX_ANIMATION_FRAMES {

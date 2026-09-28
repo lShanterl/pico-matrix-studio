@@ -5,7 +5,7 @@ use bytemuck::{Pod, Zeroable};
 use matrix_protocol::{Command, Frame, LEN_PREFIX_BYTES, MATRIX_PIXEL_COUNT, MAX_COMMAND_BYTES, MAX_WIRE_BYTES, PORT};
 use serde::Deserialize;
 use serialport::SerialPort;
-use smart_leds::{ RGB8};
+use smart_leds::{brightness, RGB8};
 use std::io::Write;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -153,6 +153,7 @@ fn estimate_power(layout: Vec<RGB>) -> PowerEstimate {
     let mut pixels: Vec<RGB8> = layout.into_iter().map(|p| RGB8 { r: p.r, g: p.g, b: p.b }).collect();
     matrix_protocol::gamma_correct(&mut pixels);
     let current_ma = matrix_protocol::estimate_current_ma(&pixels);
+    //let report = matrix_protocol::apply_brightness_limited(&pixels,brightness);
     //todo: apply brightness limited, then return powerReport and send additional data to the powerEstimate
     PowerEstimate {
         current_ma,

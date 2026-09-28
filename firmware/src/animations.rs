@@ -63,7 +63,8 @@ impl RotatingPlasmaAnimation {
         frame
     }
 }
-
+#[repr(C)]
+#[derive(Clone)]
 pub struct StoredAnimation {
     pub frames: [Frame; MAX_ANIMATION_FRAMES],
     pub frame_count: usize,
