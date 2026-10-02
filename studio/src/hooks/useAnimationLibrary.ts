@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RGB } from "../types";
+import {RGB, STORAGE_KEY} from "../types";
 
 export interface Animation {
     id: string;
@@ -8,7 +8,6 @@ export interface Animation {
     fps: number;
 }
 
-const STORAGE_KEY = "pixelart-animations";
 
 function loadFromStorage(): Animation[] {
     try {

@@ -10,6 +10,7 @@ export interface ConnectionStatus {
     ip: string;
 }
 export const IP = "192.168.1.50";
+export const STORAGE_KEY = "pico-matrix-studio-storage";
 
 export const ACTIVE_COLOR: RGB = { r: 239, g: 68, b: 68 };
 

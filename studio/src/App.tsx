@@ -12,6 +12,7 @@ import { usePowerEstimate } from "./hooks/usePowerEstimate.ts";
 import ColorTools from "./components/ColorTools.tsx";
 import Settings from "./components/Settings.tsx";
 import AnimationsTab from "./components/AnimationsTab.tsx";
+import {useDisplaySettings} from "./hooks/useSettings.ts";
 
 enum MouseActionType {
     Draw = 0,
@@ -117,6 +118,8 @@ export default function App() {
         library.deleteAnimation(id);
     };
 
+    const display = useDisplaySettings();
+
     return (
         <div className="app">
             <div className="titlebar">
@@ -138,7 +141,12 @@ export default function App() {
                 </div>
             </div>
 
-            {areSettingsOpen && <Settings/>}
+            {areSettingsOpen && <Settings
+                settings={display.settings}
+                onChange={display.updateSettings}
+                onReset={display.resetSettings}
+                onClose={() => setAreSettingsOpen(false)}
+            />}
 
             <div className="app-body">
                 <div className="sidebar">
