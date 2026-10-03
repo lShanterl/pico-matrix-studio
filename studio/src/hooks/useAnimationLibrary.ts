@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import {RGB, STORAGE_KEY} from "../types";
+import {RGB, ANIMATIONS_KEY} from "../types";
 
 export interface Animation {
     id: string;
@@ -11,7 +11,7 @@ export interface Animation {
 
 function loadFromStorage(): Animation[] {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(ANIMATIONS_KEY);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
@@ -23,7 +23,7 @@ function loadFromStorage(): Animation[] {
 
 function persistToStorage(animations: Animation[]) {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(animations));
+        localStorage.setItem(ANIMATIONS_KEY, JSON.stringify(animations));
     } catch (e) {
         console.error("Failed to save animations:", e);
     }

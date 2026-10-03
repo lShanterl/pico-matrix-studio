@@ -82,6 +82,9 @@ export default function ColorTools(
                         style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
                     />
                 ))}
+
+            </div>
+            <div className="add-remove-color-container">
                 <button className="icon-button" onClick={() => handleAddColor()}><Plus className="ic-btn"/> </button>
                 <button className='icon-button' onClick={() => handleRemoveColor()}><DeleteIcon className='ic-btn'/></button>
             </div>

@@ -4,14 +4,14 @@ import {PowerEstimate, RGB} from "../types.ts";
 
 const DEBOUNCE_MS = 100; // avoid hammering the backend while actively drawing
 
-export function usePowerEstimate(layout: RGB[]): PowerEstimate | null {
+export function usePowerEstimate(layout: RGB[], maxCurrent: number): PowerEstimate | null {
     const [power, setPower] = useState<PowerEstimate | null>(null);
 
     useEffect(() => {
         let cancelled = false;
 
         const id = setTimeout(() => {
-            invoke<PowerEstimate>("estimate_power", { layout })
+            invoke<PowerEstimate>("estimate_power", { layout, maximumCurrent: maxCurrent })
                 .then((result) => {
                     if (!cancelled) setPower(result);
                 })
@@ -24,7 +24,7 @@ export function usePowerEstimate(layout: RGB[]): PowerEstimate | null {
             cancelled = true;
             clearTimeout(id);
         };
-    }, [layout]);
+    }, [layout, maxCurrent]);
 
     return power;
 }

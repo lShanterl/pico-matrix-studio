@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RGB } from "../types.ts";
+import { RGB, SETTINGS_KEY } from "../types.ts";
 
 export type Rotation = 0 | 90 | 180 | 270;
 export const ROTATIONS: Rotation[] = [0, 90, 180, 270];
@@ -8,26 +8,28 @@ export interface DisplaySettings {
     rotation: Rotation;
     flipHorizontal: boolean;
     flipVertical: boolean;
+    currentMa: number;
 }
 
 const SIZE = 16;
-const STORAGE_KEY = "pico-matrix-studio-storage";
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
     rotation: 0,
     flipHorizontal: false,
     flipVertical: false,
+    currentMa: 0.5,
 };
 
 function loadSettings(): DisplaySettings {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(SETTINGS_KEY);
         if (!raw) return DEFAULT_DISPLAY_SETTINGS;
         const parsed = JSON.parse(raw);
         return {
             rotation: ROTATIONS.includes(parsed.rotation) ? parsed.rotation : 0,
             flipHorizontal: !!parsed.flipHorizontal,
             flipVertical: !!parsed.flipVertical,
+            currentMa: typeof parsed.currentMa === "number" ? parsed.currentMa : DEFAULT_DISPLAY_SETTINGS.currentMa,
         };
     } catch {
         return DEFAULT_DISPLAY_SETTINGS;
@@ -39,7 +41,7 @@ export function useDisplaySettings() {
 
     useEffect(() => {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
         } catch {
 
         }
@@ -56,10 +58,8 @@ export function useDisplaySettings() {
 export function applyDisplayTransform(
     frames: RGB[][],
     settings: DisplaySettings,
-    brightness: number
 ): RGB[][] {
     const last = SIZE - 1;
-    const bMultiplier = brightness / 100;
 
     return frames.map((frame) => {
         const out: RGB[] = new Array(SIZE * SIZE).fill({ r: 0, g: 0, b: 0 });
@@ -80,9 +80,9 @@ export function applyDisplayTransform(
 
                 const pixel = frame[y * SIZE + x];
                 out[dy * SIZE + dx] = {
-                    r: Math.round(pixel.r * bMultiplier),
-                    g: Math.round(pixel.g * bMultiplier),
-                    b: Math.round(pixel.b * bMultiplier),
+                    r: Math.round(pixel.r),
+                    g: Math.round(pixel.g),
+                    b: Math.round(pixel.b),
                 };
             }
         }

@@ -1,11 +1,13 @@
 import { X, FlipHorizontal, FlipVertical } from "lucide-react";
 import { DisplaySettings, ROTATIONS } from "../hooks/useSettings.ts";
+import {useCallback, useEffect, useRef, useState} from "react";
 
 interface SettingsProps {
     settings: DisplaySettings;
     onChange: (patch: Partial<DisplaySettings>) => void;
     onReset: () => void;
     onClose: () => void;
+    onSetMaxCurrent: (current: number) => Promise<void>;
 }
 
 const isDefault = (s: DisplaySettings) =>
@@ -30,7 +32,6 @@ function OrientationPreview({ settings }: { settings: DisplaySettings }) {
                 viewBox="0 0 32 32"
                 className="settings-preview-glyph"
                 style={{ transform: `scale(${sx}, ${sy}) rotate(${settings.rotation}deg)` }}
-                aria-hidden="true"
             >
                 <rect x="1" y="1" width="30" height="30" rx="3" className="settings-preview-frame" />
                 <rect x="10" y="8" width="4" height="17" className="settings-preview-letter" />
@@ -57,8 +58,6 @@ function SwitchRow({ label, checked, onToggle, icon }: SwitchRowProps) {
     return (
         <button
             type="button"
-            role="switch"
-            aria-checked={checked}
             className={`settings-switch-row ${checked ? "is-on" : ""}`}
             onClick={onToggle}
         >
@@ -72,10 +71,71 @@ function SwitchRow({ label, checked, onToggle, icon }: SwitchRowProps) {
     );
 }
 
-export default function Settings({ settings, onChange, onReset, onClose }: SettingsProps) {
+export default function Settings({ settings, onChange, onReset, onClose, onSetMaxCurrent }: SettingsProps) {
+    const [isHolding, setIsHolding] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [isApplied, setIsApplied] = useState(false);
+
+    const [sliderCurrent, setSliderCurrent] = useState(settings.currentMa);
+
+    const intervalStep = 20;
+    const timeToConfirm = 3000;
+    const timerRef = useRef<number | null> (null);
+    const intervalRef = useRef<number | null> (null);
+
+    const clearPress = useCallback(() => {
+        setIsHolding(false);
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+            timerRef.current = null;
+        }
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    }, []);
+    // keeep slider in sync if the current is changed from outside
+
+    useEffect(() => {
+        setSliderCurrent(settings.currentMa);
+    }, [settings.currentMa]);
+
+    const startPress = useCallback(() => {
+        setIsHolding(true);
+        setProgress(0);
+        const increment = (intervalStep / timeToConfirm) * 100;
+
+        intervalRef.current = window.setInterval(() => {
+            setProgress((prev) => {
+                const next = prev + increment;
+                if (next >= 100) {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    return 100;
+                }
+                return next;
+            });
+        }, intervalStep);
+
+        timerRef.current = window.setTimeout(() => {
+            setProgress(0);
+            setIsApplied(true);
+
+            onChange({ currentMa: sliderCurrent });
+            onSetMaxCurrent(sliderCurrent);
+
+            setTimeout(() => setIsApplied(false), 2500);
+        }, timeToConfirm);
+    }, [timeToConfirm, sliderCurrent, onChange, onSetMaxCurrent]);
+
+    const progressBarStyle = (isHolding && progress > 0) ? {
+        backgroundImage: `linear-gradient(var(--accent), var(--accent))`,
+        backgroundSize: `${progress}% 100%`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'left center'
+    } : undefined;
 
     return (
-        <div className="settings-pop-up-container" role="dialog" aria-label="Display settings">
+        <div className="settings-pop-up-container" >
             <div className="settings-header">
                 <div>
                     <div className="settings-title">Display orientation</div>
@@ -90,7 +150,7 @@ export default function Settings({ settings, onChange, onReset, onClose }: Setti
 
             <div className="settings-group">
                 <div className="settings-group-label">Rotation</div>
-                <div className="settings-segmented" role="radiogroup" aria-label="Rotation">
+                <div className="settings-segmented">
                     {ROTATIONS.map((deg) => {
                         const selected = settings.rotation === deg;
                         return (
@@ -98,7 +158,6 @@ export default function Settings({ settings, onChange, onReset, onClose }: Setti
                                 key={deg}
                                 type="button"
                                 role="radio"
-                                aria-checked={selected}
                                 className={`settings-segment ${selected ? "is-selected" : ""}`}
                                 onClick={() => onChange({ rotation: deg })}
                             >
@@ -125,14 +184,41 @@ export default function Settings({ settings, onChange, onReset, onClose }: Setti
                 />
             </div>
 
-            <button
-                type="button"
-                className="settings-reset"
-                onClick={onReset}
-                disabled={isDefault(settings)}
-            >
-                Reset to defaults
-            </button>
+            <div className="settings-group">
+                <div className="settings-header">
+                    <div>
+                        <div className="settings-title">Current limit</div>
+                        <div className="settings-hint">Set the maximum current your power supply can deliver. Values above its rating may overheat and damage the supply, and possibly the matrix. </div>
+                    </div>
+                </div>
+                <div className="settings-current-group">
+                    <div className="setting-current">{sliderCurrent}A</div>
+                    <input type="range" max={20} min={0.3} step={0.1} className="settings-current-slider" value={sliderCurrent} onChange={(e) => setSliderCurrent(Number(e.target.value))}/>
+                </div>
+
+            </div>
+
+            <div className="settings-confirm-button-group">
+                <button
+                    type="button"
+                    className="settings-reset"
+                    onClick={onReset}
+                    disabled={isDefault(settings)}
+                >
+                    Reset to defaults
+                </button>
+                <button
+                    type="button"
+                    className={`settings-reset apply-current-btn ${isHolding ? "is-active" : ""}`}
+                    onMouseDown={startPress}
+                    onMouseUp={clearPress}
+                    onMouseLeave={clearPress}
+                    disabled={isDefault(settings)}
+                    style={progressBarStyle}
+                >
+                    {isApplied ? `Applied ${sliderCurrent}A`: `Hold to apply ${sliderCurrent}A`}
+                </button>
+            </div>
         </div>
     );
 }

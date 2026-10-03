@@ -12,7 +12,7 @@ import { usePowerEstimate } from "./hooks/usePowerEstimate.ts";
 import ColorTools from "./components/ColorTools.tsx";
 import Settings from "./components/Settings.tsx";
 import AnimationsTab from "./components/AnimationsTab.tsx";
-import {useDisplaySettings} from "./hooks/useSettings.ts";
+import {applyDisplayTransform, useDisplaySettings} from "./hooks/useSettings.ts";
 
 enum MouseActionType {
     Draw = 0,
@@ -24,8 +24,8 @@ export default function App() {
     const pixels = usePixelLayout();
     const library = useAnimationLibrary();
     const { status, connect, disconnect } = usePicoConnection();
-    const power = usePowerEstimate(pixels.layout);
-
+    const display = useDisplaySettings();
+    const power = usePowerEstimate(pixels.layout, Math.round(display.settings.currentMa * 1000));
     const [isDrawing, setDrawing] = useState<boolean>(false);
     const initialMatrixRef = useRef<RGB[]>([]);
 
@@ -118,7 +118,6 @@ export default function App() {
         library.deleteAnimation(id);
     };
 
-    const display = useDisplaySettings();
 
     return (
         <div className="app">
@@ -146,6 +145,7 @@ export default function App() {
                 onChange={display.updateSettings}
                 onReset={display.resetSettings}
                 onClose={() => setAreSettingsOpen(false)}
+                onSetMaxCurrent={async (amps: number) => await invoke("set_ma", { current: Math.round(amps * 1000) })}
             />}
 
             <div className="app-body">
@@ -175,7 +175,10 @@ export default function App() {
                     />
                     <FloatingToolbar
                         connected={status.connected}
-                        onSend={() => invoke("send_frame_to_pico", { frames: pixels.frames, fps: library.activeAnimation?.fps})}
+                        onSend={async () => {
+                            const frames = applyDisplayTransform(pixels.frames, display.settings);
+                            await invoke("send_frame_to_pico", { frames: frames, fps: library.activeAnimation?.fps})
+                        }}
                         activeTool={activeTool}
                         onToolChange={setActiveTool}
                         onUndo={pixels.undo}
