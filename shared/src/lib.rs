@@ -11,7 +11,9 @@ pub const MAX_COMMAND_BYTES: usize = 1 + 2 + FRAME_BYTES;
 pub const LEN_PREFIX_BYTES: usize = 2;
 // Largest thing written to the socket: length prefix + command payload
 pub const MAX_WIRE_BYTES: usize = MAX_COMMAND_BYTES + LEN_PREFIX_BYTES;
-pub const PORT: u16 = 7778;
+pub const BEACON_PORT: u16 = 7779; // UDP Pico "im here" port pico -> app
+pub const PORT: u16 = 7778; //TCP main operations port app ->pico
+pub const BEACON_MAGIC: &[u8; 7] = b"PICOMTX";
 
 use smart_leds::RGB8;
 pub type Frame = [RGB8; MATRIX_PIXEL_COUNT];

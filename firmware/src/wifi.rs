@@ -13,6 +13,7 @@ use embassy_rp::pio::Pio;
 use embassy_time::{with_timeout, Duration};
 use log::info;
 use static_cell::StaticCell;
+use crate::beacon::beacon_task;
 use crate::config::{WIFI_PASSWORD, WIFI_SSID};
 use crate::tcp_listener::control_task;
 
@@ -57,10 +58,10 @@ pub struct Wifi {
     pub control: cyw43::Control<'static>,
     pub net_device: cyw43::NetDriver<'static>,
 }
-
-static RESOURCES: StaticCell<StackResources<4>> = StaticCell::new();
-
-pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'static> {
+//
+static RESOURCES: StaticCell<StackResources<6>> = StaticCell::new(); //// TCP + DHCP + UDP
+#[embassy_executor::task]
+pub async fn wifi_manager(spawner: Spawner, p: WifiPeripherals) {
     let country_locale_matrix = include_bytes!("../wifi-blobs/43439A0_clm.bin");
 
     // Configuring physical pins that manage network device on Raspberry Pico W (must be those pins)
@@ -94,7 +95,7 @@ pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'s
     )
     .await;
 
-    spawner.spawn(wifi_task(runner).unwrap());
+    spawner.spawn(wifi_task(runner).unwrap()); // chip driver 1.
 
     control.init(country_locale_matrix).await;
     control
@@ -109,26 +110,15 @@ pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'s
         }
     }
     drop(scanner);
-    
-    info!("Connecting to Wi-Fi: {}", WIFI_SSID);
-    match with_timeout(
-        Duration::from_secs(15),
-        control.join(WIFI_SSID, JoinOptions::new(WIFI_PASSWORD.as_bytes())),
-    )
-        .await
-    {
-        Ok(Ok(_)) => info!("Connected to Wi-Fi!"),
-        Ok(Err(err)) => info!("Error connecting to Wi-Fi: status={:?}", err),
-        Err(_) => info!("Join timed out after 15s (SSID not found, or auth failing silently)"),
-    }
 
-    info!("after connecting to Wi-Fi");
+    let config = Config::dhcpv4(Default::default());
 
-    let config = Config::ipv4_static(StaticConfigV4 {
-        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 50), 24),
-        gateway: Some(Ipv4Address::new(192, 168, 1, 1)),
-        dns_servers: Default::default(),
-    });
+    // using dhcp protocol now to maximize compatibility
+    // let config = Config::ipv4_static(StaticConfigV4 {
+    //     address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 50), 24),
+    //     gateway: Some(Ipv4Address::new(192, 168, 1, 1)),
+    //     dns_servers: Default::default(),
+    // });
 
     let (stack, runner) = embassy_net::new(
         net_device,
@@ -137,9 +127,31 @@ pub async fn init(spawner: Spawner, p: WifiPeripherals) -> embassy_net::Stack<'s
         0x1234_5678,
     );
 
-    spawner.spawn(net_task(runner).unwrap());
+    spawner.spawn(net_task(runner).unwrap()); //TCP/IP stack 2.
+    spawner.spawn(control_task(stack).unwrap()); // protocol 3.
+    spawner.spawn(beacon_task(stack).unwrap()); // UDP protocol for discovery 4.
 
-    spawner.spawn(control_task(stack).unwrap());
-
-    stack
+    info!("Connecting to Wi-Fi: {}", WIFI_SSID);
+    loop{
+        match with_timeout(
+            Duration::from_secs(15),
+            control.join(WIFI_SSID, JoinOptions::new(WIFI_PASSWORD.as_bytes())),
+        )
+            .await
+        {
+            Ok(Ok(_)) => {
+                info!("Connected to Wi-Fi!");
+                stack.wait_link_up().await;
+                info!("Link is up");
+                stack.wait_config_up().await;
+                if let Some(c) = stack.config_v4() { info!("Got IP: {}", c.address); }
+                stack.wait_link_down().await;
+                info!("Wi-Fi link lost, retrying");
+            },
+            Ok(Err(err)) => info!("Error connecting to Wi-Fi: status={:?}", err),
+            Err(_) => info!("Join timed out (SSID not found, or auth failing silently)"),
+        }
+        control.leave().await;
+        embassy_time::Timer::after_secs(5).await;
+    }
 }

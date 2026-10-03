@@ -11,9 +11,10 @@ mod tcp_listener;
 mod usb;
 mod wifi;
 mod storage;
+mod bootsel;
+mod beacon;
 
 use embassy_executor::Spawner;
-use embassy_hal_internal::peripherals;
 use embassy_rp::flash::Flash;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -21,9 +22,8 @@ use embassy_time::{Duration, Timer};
 
 use embedded_alloc::LlffHeap as Heap;
 use matrix_protocol::Command;
-use smart_leds::brightness;
 use crate::irqs::Irqs;
-use crate::storage::{storage_task, DeviceStorage, Mode, STATE};
+use crate::storage::{storage_task, Mode, STATE};
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -34,11 +34,8 @@ pub static COMMAND_CHANNEL: Channel<CriticalSectionRawMutex, Command, 4> = Chann
 async fn main(spawner: Spawner) -> ! {
     let peripherals = embassy_rp::init(Default::default());
 
-    let device_storage = DeviceStorage::new();
-
     usb::init(spawner, peripherals.USB).await;
-
-    let _wifi = wifi::init(
+    spawner.spawn(wifi::wifi_manager(
         spawner,
         wifi::WifiPeripherals {
             pio1: peripherals.PIO1,
@@ -48,8 +45,7 @@ async fn main(spawner: Spawner) -> ! {
             data: peripherals.PIN_24,
             clock: peripherals.PIN_29,
         },
-    )
-    .await;
+    ).unwrap());
 
     let mut matrix = led_matrix::LedMatrix::new(led_matrix::MatrixPeripherals {
         pio0: peripherals.PIO0,
@@ -85,7 +81,8 @@ async fn main(spawner: Spawner) -> ! {
                     }
                     mode = Mode::Uploaded;
                     anim_idx = 0;
-                    let _ = storage::SAVE_CHANNEL.try_send(());
+                    storage::request_animation_save();
+                    storage::request_settings_save();
                 }
                 Command::SetBrightness(b) => {
                     let safe_level = b.clamp(0, 100);
@@ -94,7 +91,8 @@ async fn main(spawner: Spawner) -> ! {
                         let mut storage = STATE.lock().await;
                         storage.brightness = brightness_f32;
                     }
-                    let _ = storage::SAVE_CHANNEL.try_send(());
+                    storage::request_settings_save();
+
                     matrix.request_refresh();
                 }
                 Command::SetAmper(mA) =>{
@@ -102,7 +100,7 @@ async fn main(spawner: Spawner) -> ! {
                         let mut storage = STATE.lock().await;
                         storage.max_amper = mA;
                     }
-                    let _ = storage::SAVE_CHANNEL.try_send(());
+                    storage::request_settings_save();
                     matrix.request_refresh();
                 }
                 Command::SelectAnimation(id) => {
@@ -113,6 +111,8 @@ async fn main(spawner: Spawner) -> ! {
                 Command::PlayUploadedAnimation => {
                     mode = Mode::Uploaded;
                     anim_idx = 0;
+                    STATE.lock().await.set_mode(Mode::Uploaded);
+                    storage::request_settings_save();
                 }
                 _ => {} // upload-related tags never reach here
             }

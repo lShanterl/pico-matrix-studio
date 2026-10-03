@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bytemuck::{Pod, Zeroable};
-use matrix_protocol::{Command, Frame, LEN_PREFIX_BYTES, MATRIX_PIXEL_COUNT, MAX_COMMAND_BYTES, MAX_WIRE_BYTES, PORT};
+use matrix_protocol::{Command, Frame, BEACON_PORT, LEN_PREFIX_BYTES, MATRIX_PIXEL_COUNT, MAX_COMMAND_BYTES, MAX_WIRE_BYTES, PORT, BEACON_MAGIC};
 use serde::Deserialize;
 use serialport::SerialPort;
 use smart_leds::{brightness, RGB8};
@@ -85,10 +85,27 @@ async fn send_frame_to_pico(state: tauri::State<'_,NetworkState>, frames: Vec<Ve
     }
 }
 
+async fn discover_pico() -> Result<String, String> {
+    let socket = tokio::net::UdpSocket::bind(("0.0.0.0", BEACON_PORT))
+        .await.map_err(|e| e.to_string())?;
+    let mut buf = [0u8; 64];
+
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let (n, from) = socket.recv_from(&mut buf).await.map_err(|e| e.to_string())?;
+            if n >= 7 && &buf[..7] == BEACON_MAGIC {
+                return Ok(from.ip().to_string()); // get the ip address of the pico beacon
+            }
+        }
+    }).await.map_err(|_| "No device found".to_string())?
+}
 #[tauri::command]
-async fn connect_to_pico(app: AppHandle, state: tauri::State<'_, NetworkState>, ip: String) -> Result<(), String> {
+async fn connect_to_pico(app: AppHandle, state: tauri::State<'_, NetworkState>) -> Result<(), String> {
     println!("Connecting to pico...");
     let mut guard = state.0.lock().await;
+
+    let ip = discover_pico().await?;
+
     let addr = format!("{}:{}", ip, PORT);
 
     return match TcpStream::connect(addr).await {
@@ -149,7 +166,7 @@ async fn disconnect_from_pico(app: AppHandle, state: tauri::State<'_,NetworkStat
     }
 }
 #[tauri::command]
-fn estimate_power(layout: Vec<RGB>) -> PowerEstimate {
+fn estimate_power(layout: Vec<RGB>, maximum_current: u32) -> PowerEstimate {
     let mut pixels: Vec<RGB8> = layout.into_iter().map(|p| RGB8 { r: p.r, g: p.g, b: p.b }).collect();
     matrix_protocol::gamma_correct(&mut pixels);
     let current_ma = matrix_protocol::estimate_current_ma(&pixels);
@@ -157,8 +174,8 @@ fn estimate_power(layout: Vec<RGB>) -> PowerEstimate {
     //todo: apply brightness limited, then return powerReport and send additional data to the powerEstimate
     PowerEstimate {
         current_ma,
-        max_current_ma: matrix_protocol::MAX_CURRENT_MA,
-        over_limit: current_ma > matrix_protocol::MAX_CURRENT_MA as f32,
+        max_current_ma: maximum_current,
+        over_limit: current_ma > maximum_current as f32,
     }
 }
 
@@ -169,8 +186,8 @@ async fn set_brightness(state: tauri::State<'_, NetworkState>, value: u8) -> Res
 }
 
 #[tauri::command]
-async fn set_ma(state: tauri::State<'_, NetworkState>, value: u16) -> Result<(), String>{
-    let command = Command::SetAmper(value);
+async fn set_ma(state: tauri::State<'_, NetworkState>, current: u16) -> Result<(), String>{
+    let command = Command::SetAmper(current);
     send_command(&state, command).await
 }
 

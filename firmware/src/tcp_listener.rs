@@ -3,8 +3,8 @@ use embassy_net::tcp::TcpSocket;
 use embassy_net::udp::PacketMetadata;
 use log::info;
 use matrix_protocol::{Command, MAX_ANIMATION_FRAMES, MAX_COMMAND_BYTES, PORT};
-use crate::COMMAND_CHANNEL;
-use crate::storage::{SAVE_CHANNEL, STATE};
+use crate::{storage, COMMAND_CHANNEL};
+use crate::storage::{ STATE};
 
 async fn read_exact(
     socket: &mut TcpSocket<'_>,
@@ -67,7 +67,7 @@ pub async fn control_task(stack: embassy_net::Stack<'static>) {
                         state.custom_animation.frame_count = expected_frames as usize;
                         info!("Animation stored: {} frames @ {} fps", state.custom_animation.frame_count, state.custom_animation.fps);
                     }
-                    let _ = SAVE_CHANNEL.try_send(());
+                    storage::request_animation_save();
                 }
                 Ok(Command::UploadAnimationFrame {index, frame}) => {
                     if (index as usize) < matrix_protocol::MAX_ANIMATION_FRAMES {
