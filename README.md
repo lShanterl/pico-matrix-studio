@@ -43,8 +43,11 @@ The physical build is designed for clean light diffusion, easy assembly, and sta
 - **Pixel Grid:** A physical grid sits directly over the LED matrix. This isolates each pixel into its own physical cell, preventing most of the light from bleeding into neighboring pixels so that every "pixel" remains sharp, distinct square. The grid also features recesses for the capacitors.
 - **Data Protection:** A 330Ω inline resistor is placed on the data line between the Pico's GPIO pin and the WS2812 Data-In pin to prevent impedance issues and protect the microcontroller.
 - **Assembly:** Wiring is routed through a quick connector for easy assembly and maintenance without excessive soldering.
-- **Power Stability:** A 10µF capacitor is placed across the 5V and GND power lines to smooth out power delivery and prevent sudden inrush currents from damaging the LEDs on startup.
+- **Power Stability:** A 1000µF capacitor is placed across the 5V and GND power lines to smooth out power delivery and prevent sudden inrush currents from damaging the LEDs on startup.
 - **Easy BOOTSEL Access:** Features a hole that allows resetting the microcontroller without the need to dismount the entire matrix.
+
+<img src="./docs/pico-matrix-studio-wiring.png" alt="Pico wiring"/>
+
 
 ## Bill of Materials
 
@@ -54,12 +57,12 @@ Raspberry Pi Pico W | Main microcontroller
 WS2812 LED Matrix | Primary display panel
 Pixel Separator Grid | Physical baffle to isolate LEDs and prevent light bleed
 Milky Plexiglass | Mounted over the grid for pixel light diffusion
-10µF Capacitor | Smooths power delivery and prevents LED burn-out
+1000µF Capacitor | Smooths power delivery and prevents LED burn-out
 330Ω Resistor | Placed between Pico GPIO and WS2812 data-in pin
 Quick Connector | Terminal block for easy component wiring
 Power Supply | 5V external power supply (ensure adequate amperage)
 
-## Building & Running
+## Build & Running
 ### 1. Building the Firmware (Pico W)
 Prerequisities:
 - Rust toolchain with the thumbv6m-none-eabi target installed.
